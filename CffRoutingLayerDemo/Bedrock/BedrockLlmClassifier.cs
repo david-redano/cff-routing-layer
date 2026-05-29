@@ -45,6 +45,13 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
     public IntentResult Classify(string normalizedText)
         => ClassifyAsync(normalizedText).GetAwaiter().GetResult();
 
+    /// <summary>
+    /// LLM prompt is single-intent by design. Returns the result as a singleton list.
+    /// Multi-intent splitting from LLM output is a future enhancement.
+    /// </summary>
+    public IReadOnlyList<IntentResult> ClassifyAll(string normalizedText)
+        => [Classify(normalizedText)];
+
     public async Task<IntentResult> ClassifyAsync(
         string normalizedText,
         CancellationToken ct = default)

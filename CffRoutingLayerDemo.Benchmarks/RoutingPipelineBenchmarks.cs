@@ -54,7 +54,8 @@ public class RoutingPipelineBenchmarks
             Query,
             "BENCH-001",
             DateTime.UtcNow);
-        return await _engine.HandleAsync(ctx);
+        var (result, _) = await _engine.HandleAsync(ctx);
+        return result;
     }
 
     private static IEnumerable<string> LoadQueries()

@@ -150,8 +150,8 @@ public static class ConsoleRenderer
             .AddRow("Total executor time",     $"{s.TotalExecutorMs} ms")
             .AddRow("", "")
             .AddRow("LLM calls (total)",       $"[yellow]{s.TotalLlmCalls}[/]")
-            .AddRow("  Rewriter calls",        $"{s.LlmRewriterCalls}  [{(s.TotalRewriterMs > 0 ? s.TotalRewriterMs / s.LlmRewriterCalls : 0)} ms avg]")
-            .AddRow("  Classifier calls",      $"{s.LlmClassifierCalls}  [{(s.LlmClassifierCalls > 0 && s.TotalClassifierMs > 0 ? s.TotalClassifierMs / s.LlmClassifierCalls : 0)} ms avg]")
+            .AddRow("  Rewriter calls",        $"{s.LlmRewriterCalls}  ({(s.TotalRewriterMs > 0 ? s.TotalRewriterMs / s.LlmRewriterCalls : 0)} ms avg)")
+            .AddRow("  Classifier calls",      $"{s.LlmClassifierCalls}  ({(s.LlmClassifierCalls > 0 && s.TotalClassifierMs > 0 ? s.TotalClassifierMs / s.LlmClassifierCalls : 0)} ms avg)")
             .AddRow("  RAG calls",             $"{s.LlmRagCalls}")
             .AddRow("  Streaming calls",       $"{s.LlmStreamingCalls}");
 
@@ -170,7 +170,7 @@ public static class ConsoleRenderer
             foreach (var (intent, count) in s.IntentCounts.OrderByDescending(kv => kv.Value))
             {
                 var bar = new string('█', (int)(count * 20.0 / s.TotalQueries));
-                dist.AddRow(intent, $"{count}", $"[cyan1]{bar}[/] {count * 100.0 / s.TotalQueries:F0}%");
+                dist.AddRow(Markup.Escape(intent), $"{count}", $"[cyan1]{bar}[/] {count * 100.0 / s.TotalQueries:F0}%");
             }
 
             AnsiConsole.Write(dist);

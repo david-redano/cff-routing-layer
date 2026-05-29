@@ -229,3 +229,59 @@ public sealed class RewriterTests
     }
 }
 
+public sealed class MultiIntentClassificationTests
+{
+    private static readonly RuleBasedClassifier Classifier = new();
+
+    [Theory]
+    [InlineData(
+        "show me cash flow and also what's my tax liability for ${year}",
+        "GenerateCashFlowReport", "EstimateTaxLiability")]
+    [InlineData(
+        "generate a profit and loss report and reconcile account CHK-001",
+        "GenerateProfitLoss", "ReconcileAccount")]
+    [InlineData(
+        "what are our taxes and how long is our cash runway?",
+        "EstimateTaxLiability", "ForecastCashRunway")]
+    [InlineData(
+        "reconcile the bank statement and analyze any profit anomalies",
+        "ReconcileAccount", "AnalyzeProfitAnomaly")]
+    public void ClassifyAll_ReturnsAllMatchingIntents(
+        string query, string expectedIntent1, string expectedIntent2)
+    {
+        var results = Classifier.ClassifyAll(query);
+        var intentNames = results.Select(r => r.Intent).ToList();
+
+        Assert.Contains(expectedIntent1, intentNames);
+        Assert.Contains(expectedIntent2, intentNames);
+        Assert.True(results.Count >= 2,
+            $"Expected ≥2 intents for \"{query}\", got {results.Count}: {string.Join(", ", intentNames)}");
+    }
+
+    [Fact]
+    public void ClassifyAll_SingleIntentQuery_ReturnsOne()
+    {
+        var results = Classifier.ClassifyAll("generate a cash flow report for last month");
+        var known = results.Where(r => r.Intent != "Unknown").ToList();
+        Assert.Single(known);
+        Assert.Equal("GenerateCashFlowReport", known[0].Intent);
+    }
+
+    [Fact]
+    public void ClassifyAll_UnknownQuery_ReturnsUnknown()
+    {
+        var results = Classifier.ClassifyAll("what's the weather today?");
+        Assert.All(results, r => Assert.Equal("Unknown", r.Intent));
+    }
+
+    [Fact]
+    public void ClassifyAll_OrderedByDescendingScore()
+    {
+        var results = Classifier.ClassifyAll(
+            "show me cash flow and also what's my tax liability for ${year}");
+        for (int i = 1; i < results.Count; i++)
+            Assert.True(results[i - 1].Confidence >= results[i].Confidence,
+                "Results should be ordered by descending confidence");
+    }
+}
+

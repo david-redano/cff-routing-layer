@@ -123,14 +123,16 @@ public sealed class RoutingEngine
 
         // Stage 4 — Intent Classification (on normalised text)
         var clSw = Stopwatch.StartNew();
-        var intent = _classifier.Classify(rewritten.NormalizedText);
+        var allIntents = _classifier.ClassifyAll(rewritten.NormalizedText);
         clSw.Stop();
         if (_classifier is not CffRoutingLayerDemo.Classification.RuleBasedClassifier)
             _stats?.RecordLlmClassifierCall(clSw.ElapsedMilliseconds);
         else if (_stats is not null)
             _stats.RecordLlmClassifierCall(0);
 
-        if (intent.Intent == "Unknown")
+        var knownIntents = allIntents.Where(i => i.Intent != "Unknown").ToList();
+
+        if (knownIntents.Count == 0)
         {
             // Capability-based fallback: scan registered agents for a capability
             // keyword that appears in the normalised message.
@@ -141,8 +143,9 @@ public sealed class RoutingEngine
                 Console.WriteLine(
                     $"  ► Stage 4b Capability match...             ✓ {capable.AgentId} [{string.Join(", ", capable.Capabilities)}]");
                 Console.ResetColor();
-                intent = new IntentResult(capable.Intent, 0.5, new Dictionary<string, string>(rewritten.ExtractedEntities),
-                    capable.AgentId, RequiresConfirmation: false);
+                knownIntents = [new IntentResult(capable.Intent, 0.5,
+                    new Dictionary<string, string>(rewritten.ExtractedEntities),
+                    capable.AgentId, RequiresConfirmation: false)];
             }
             else
             {
@@ -151,45 +154,85 @@ public sealed class RoutingEngine
             }
         }
 
-        // Merge rewriter entities into classifier entities (rewriter is more precise for PII)
-        var mergedEntities = rewritten.MergeEntities(intent.Entities);
-        intent = intent with { Entities = mergedEntities };
+        bool isMulti = knownIntents.Count > 1;
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine(
-            $"  ► Stage 4  Intent classification...        ✓ {intent.Intent} ({intent.Confidence:P0})");
+        if (isMulti)
+            Console.WriteLine(
+                $"  ► Stage 4  Intent classification...        ✓ {knownIntents.Count} intents: " +
+                string.Join(", ", knownIntents.Select(i => i.Intent)));
+        else
+            Console.WriteLine(
+                $"  ► Stage 4  Intent classification...        ✓ {knownIntents[0].Intent} ({knownIntents[0].Confidence:P0})");
 
-        // Stage 5 — Agent Registry Lookup
-        var agent = _registry.Resolve(intent.AgentId);
-        Console.WriteLine(
-            $"  ► Stage 5  Agent registry lookup...        ✓ {agent.AgentId}");
-
-        // Stage 6 — Execution Plan Generation
-        var plan = agent.BuildPlan(intent, context);
-        Console.WriteLine(
-            $"  ► Stage 6  Execution plan generated...     ✓ {plan.Steps.Count} steps");
-
-        // Stage 7 — Execute & Cache (store on normalised text key)
-        Console.WriteLine("  ► Stage 7  Executing plan...");
-        Console.ResetColor();
+        // Stages 5–7 — execute each intent; collect partial results
+        var partialResults  = new List<string>(knownIntents.Count);
+        ExecutionPlan?  primaryPlan   = null;
+        IntentResult    primaryIntent = knownIntents[0];
 
         var execSw = Stopwatch.StartNew();
-        var result = await _executor.ExecuteAsync(plan, context with { Entities = mergedEntities }, ct);
+
+        for (int idx = 0; idx < knownIntents.Count; idx++)
+        {
+            var intent = knownIntents[idx];
+
+            // Merge rewriter entities into classifier entities (rewriter is more precise for PII)
+            var mergedEntities = rewritten.MergeEntities(intent.Entities);
+            intent = intent with { Entities = mergedEntities };
+
+            // Stage 5 — Agent Registry Lookup
+            var agent = _registry.Resolve(intent.AgentId);
+            Console.WriteLine(
+                $"  ► Stage 5  Agent registry lookup...        ✓ {agent.AgentId}");
+
+            // Stage 6 — Execution Plan Generation
+            var plan = agent.BuildPlan(intent, context);
+            Console.WriteLine(
+                $"  ► Stage 6  Execution plan generated...     ✓ {plan.Steps.Count} steps");
+
+            // Stage 7 — Execute
+            Console.WriteLine(isMulti
+                ? $"  ► Stage 7  Executing plan [{idx + 1}/{knownIntents.Count}]..."
+                : "  ► Stage 7  Executing plan...");
+            Console.ResetColor();
+
+            var partialResult = await _executor.ExecuteAsync(
+                plan, context with { Entities = mergedEntities }, ct);
+
+            partialResults.Add(isMulti
+                ? $"══ [{idx + 1}/{knownIntents.Count}] {intent.Intent} ══\n{partialResult}"
+                : partialResult);
+
+            if (idx == 0)
+            {
+                primaryPlan   = plan;
+                primaryIntent = intent;
+            }
+
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+        }
+
         execSw.Stop();
         _stats?.RecordExecutorMs(execSw.ElapsedMilliseconds);
 
-        _cache.Store(rewritten.NormalizedText, intent, plan);
-        Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine("             [Stored in semantic cache]");
-        Console.ResetColor();
+        var result = string.Join("\n\n", partialResults);
+
+        // Cache only single-intent queries — compound queries are too specific to reuse reliably
+        if (!isMulti && primaryPlan is not null)
+        {
+            _cache.Store(rewritten.NormalizedText, primaryIntent, primaryPlan);
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine("             [Stored in semantic cache]");
+            Console.ResetColor();
+        }
 
         history?.AddTurn(new ConversationTurn(
             Timestamp:          DateTime.UtcNow,
             UserMessage:        context.UserMessage,
             NormalizedMessage:  rewritten.NormalizedText,
-            ExtractedEntities:  mergedEntities,
-            Intent:             intent.Intent,
-            AgentId:            intent.AgentId,
+            ExtractedEntities:  primaryIntent.Entities,
+            Intent:             string.Join("+", knownIntents.Select(i => i.Intent)),
+            AgentId:            primaryIntent.AgentId,
             AssistantResponse:  result,
             WasStreamed:        false));
 

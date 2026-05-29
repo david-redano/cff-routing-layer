@@ -37,7 +37,8 @@ public sealed class RuleBasedClassifier : IIntentClassifier
 
         new("AnalyzeProfitAnomaly", "ProfitAuditAgent",
             ["profit drop", "why did my profit", "expenses increase", "revenue decline",
-             "profit decrease", "why did profit", "profit fell", "margin drop"]),
+             "profit decrease", "why did profit", "profit fell", "margin drop",
+             "profit anomaly", "profit anomalies", "anomaly", "anomalies", "unusual profit"]),
 
         new("OptimizeTaxDeductions", "TaxOptimizationAgent",
             ["tax write-off", "write-off", "deductions can i claim", "tax deduction",
@@ -77,6 +78,31 @@ public sealed class RuleBasedClassifier : IIntentClassifier
             best.Rule.AgentId,
             best.Rule.RequiresConfirmation
         );
+    }
+
+    public IReadOnlyList<IntentResult> ClassifyAll(string userMessage)
+    {
+        var lower = userMessage.ToLowerInvariant();
+
+        var matches = Rules
+            .Select(rule => new
+            {
+                Rule  = rule,
+                Score = (double)rule.Keywords.Count(kw => lower.Contains(kw)) / rule.Keywords.Length
+            })
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
+            .Select(x => new IntentResult(
+                x.Rule.Intent,
+                Math.Min(0.70 + x.Score * 0.29, 0.99),
+                ExtractEntities(lower, x.Rule.Intent),
+                x.Rule.AgentId,
+                x.Rule.RequiresConfirmation))
+            .ToList();
+
+        return matches.Count > 0
+            ? matches
+            : [new IntentResult("Unknown", 0.1, new(), "None", false)];
     }
 
     private static Dictionary<string, string> ExtractEntities(string lower, string intent) =>

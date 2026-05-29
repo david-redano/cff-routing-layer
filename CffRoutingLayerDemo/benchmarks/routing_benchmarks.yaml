@@ -34,3 +34,17 @@ benchmarks:
       - query: "What's our net income for 2024?"
         intent: GenerateProfitLoss
         expectCacheHit: true
+
+  - name: "Multi-intent routing"
+    description: "Compound queries that trigger 2–3 intents in a single message; measures classification fan-out and sequential plan execution overhead"
+    queries:
+      - query: "Show me cash flow and also what's my tax liability for this year"
+        intent: GenerateCashFlowReport+EstimateTaxLiability
+      - query: "Generate a profit and loss report and reconcile account CHK-001"
+        intent: GenerateProfitLoss+ReconcileAccount
+      - query: "What are our taxes and how long is our cash runway?"
+        intent: EstimateTaxLiability+ForecastCashRunway
+      - query: "Reconcile the bank statement and analyze any profit anomalies"
+        intent: ReconcileAccount+AnalyzeProfitAnomaly
+      - query: "Show me cash flow, profit and loss, and estimate tax liability"
+        intent: GenerateCashFlowReport+GenerateProfitLoss+EstimateTaxLiability
