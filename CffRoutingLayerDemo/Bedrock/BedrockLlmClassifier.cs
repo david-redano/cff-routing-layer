@@ -21,13 +21,13 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
 
     private static readonly string SystemPrompt = $$"""
         You are an intent classifier for a financial accounting assistant.
-        Given a user message (already PII-anonymised), classify it into exactly one of:
+        Given a user message (already PII-anonymised), classify it into zero or more of:
 
         {{string.Join(", ", CanonicalPhrases.Intents)}}
 
         Rules:
-        - Return "Unknown" if the message is not clearly about accounting/finance.
-        - Return JSON only: { "intent": "...", "confidence": 0.0-1.0, "agentId": "..." }
+        - Return an empty array if the message is not clearly about accounting/finance.
+        - Return JSON only: [ { "intent": "...", "confidence": 0.0-1.0, "agentId": "..." }, ... ]
         - confidence: 1.0 = certain, 0.7 = likely, 0.5 = uncertain.
         - agentId: use the agent mapped to the intent (see canonical list); empty string for Unknown.
         - Do NOT include markdown or prose.
@@ -117,5 +117,78 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
     /// Multi-intent splitting from LLM output is a future enhancement.
     /// </summary>
     public IReadOnlyList<IntentResult> ClassifyAll(string normalizedText)
-        => [Classify(normalizedText)];
+        => ClassifyAllAsync(normalizedText).GetAwaiter().GetResult();
+
+    public async Task<IReadOnlyList<IntentResult>> ClassifyAllAsync(string normalizedText, CancellationToken ct = default)
+    {
+        var request = new ConverseRequest
+        {
+            ModelId = _modelId,
+            System  = [new SystemContentBlock { Text = SystemPrompt }],
+            Messages =
+            [
+                new Message
+                {
+                    Role    = ConversationRole.User,
+                    Content = [new ContentBlock { Text = $"Classify: \"{normalizedText}\"" }]
+                }
+            ],
+            InferenceConfig = new InferenceConfiguration
+            {
+                MaxTokens   = 200,
+                Temperature = 0f
+            }
+        };
+
+        try
+        {
+            var response = await _client.ConverseAsync(request, ct);
+            var json     = response.Output.Message.Content[0].Text.Trim();
+            return ParseMultiResponse(json, normalizedText);
+        }
+        catch
+        {
+            return [new IntentResult("Unknown", 0.0, new Dictionary<string, string>(), "", false)];
+        }
+    }
+
+    private static IReadOnlyList<IntentResult> ParseMultiResponse(string json, string input)
+    {
+        // Strip markdown fences if present
+        var cleaned = json.TrimStart('`');
+        if (cleaned.StartsWith("json", StringComparison.OrdinalIgnoreCase))
+            cleaned = cleaned[4..];
+        cleaned = cleaned.TrimEnd('`').Trim();
+
+        try
+        {
+            var results = new List<IntentResult>();
+            using var doc = JsonDocument.Parse(cleaned);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var elem in doc.RootElement.EnumerateArray())
+                {
+                    var intent     = elem.GetProperty("intent").GetString() ?? "Unknown";
+                    var confidence = elem.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5;
+                    var agentId    = elem.TryGetProperty("agentId", out var a) ? a.GetString() ?? "" : "";
+                    if (!CanonicalPhrases.Intents.Contains(intent)) intent = "Unknown";
+                    results.Add(new IntentResult(intent, confidence, new Dictionary<string, string>(), agentId, false));
+                }
+            }
+            else
+            {
+                // Fallback: single object
+                var intent     = doc.RootElement.GetProperty("intent").GetString() ?? "Unknown";
+                var confidence = doc.RootElement.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5;
+                var agentId    = doc.RootElement.TryGetProperty("agentId", out var a) ? a.GetString() ?? "" : "";
+                if (!CanonicalPhrases.Intents.Contains(intent)) intent = "Unknown";
+                results.Add(new IntentResult(intent, confidence, new Dictionary<string, string>(), agentId, false));
+            }
+            return results.Count > 0 ? results : [new IntentResult("Unknown", 0.0, new Dictionary<string, string>(), "", false)];
+        }
+        catch
+        {
+            return [new IntentResult("Unknown", 0.0, new Dictionary<string, string>(), "", false)];
+        }
+    }
 }
