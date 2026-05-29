@@ -19,22 +19,25 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
     private readonly AmazonBedrockRuntimeClient _client;
     private readonly string _modelId;
 
-    private static readonly string SystemPrompt = $$"""
-        You are an intent classifier for a financial accounting assistant.
-        Given a user message (already PII-anonymised), classify it into zero or more of:
+    private static readonly string SystemPrompt =
+        $$"""
+    You are an intent classifier for a financial accounting assistant.
+    Given a user message (already PII-anonymised), classify it into zero or more of:
 
-        {{string.Join(", ", CanonicalPhrases.Intents)}}
+    {{string.Join(", ", CanonicalPhrases.Intents)}}
 
-        Rules:
-        - Return an empty array if the message is not clearly about accounting/finance.
-        - Return JSON only: [ { "intent": "...", "confidence": 0.0-1.0, "agentId": "..." }, ... ]
-        - confidence: 1.0 = certain, 0.7 = likely, 0.5 = uncertain.
-        - agentId: use the agent mapped to the intent (see canonical list); empty string for Unknown.
-        - Do NOT include markdown or prose.
+    Rules:
+    - Only classify messages that are clearly and unambiguously about a supported accounting or finance task.
+    - If the message is vague, generic, ambiguous, or does not mention a concrete accounting/finance action, return an empty array (no intent).
+    - Do NOT infer intent from generic commands (e.g., "run this", "do it now", "run the report", "run the balance sheet") or from requests that do not specify a clear accounting/finance task.
+    - Return JSON only: [ { "intent": "...", "confidence": 0.0-1.0, "agentId": "..." } , ... ]
+    - confidence: 1.0 = certain, 0.7 = likely, 0.5 = uncertain.
+    - agentId: use the agent mapped to the intent (see canonical list); empty string for Unknown.
+    - Do NOT include markdown or prose.
 
-        Intent → AgentId mappings:
-        {{string.Join("\n", CanonicalPhrases.IntentToAgent.Select(kv => $"  {kv.Key} → {kv.Value}"))}}
-        """;
+    Intent → AgentId mappings:
+    {{string.Join("\n", CanonicalPhrases.IntentToAgent.Select(kv => $"  {kv.Key} → {kv.Value}"))}}
+    """;
 
     public BedrockLlmClassifier(AppConfig config)
     {

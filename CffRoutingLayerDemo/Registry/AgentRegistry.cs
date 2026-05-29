@@ -12,20 +12,34 @@ using CffRoutingLayerDemo.Plans;
 /// <see cref="BuildDefault"/> is kept for unit tests that run without a plans
 /// directory.
 /// </summary>
+
 public sealed class AgentRegistry
 {
-    private readonly Dictionary<string, AgentManifest> _agents;
+    // Now supports multiple plans/intents per agent
+    private readonly Dictionary<string, List<AgentManifest>> _agents;
 
     public AgentRegistry(IEnumerable<AgentManifest> agents)
-        => _agents = agents.ToDictionary(a => a.AgentId, StringComparer.Ordinal);
+    {
+        _agents = new Dictionary<string, List<AgentManifest>>(StringComparer.Ordinal);
+        foreach (var agent in agents)
+        {
+            if (!_agents.TryGetValue(agent.AgentId, out var list))
+            {
+                list = new List<AgentManifest>();
+                _agents[agent.AgentId] = list;
+            }
+            list.Add(agent);
+        }
+    }
 
-    /// <summary>Look up a registered agent by its AgentId.</summary>
-    public AgentManifest Resolve(string agentId)
-        => _agents.TryGetValue(agentId, out var manifest)
-            ? manifest
+
+    /// <summary>Look up all registered manifests for an AgentId.</summary>
+    public IReadOnlyList<AgentManifest> Resolve(string agentId)
+        => _agents.TryGetValue(agentId, out var manifests)
+            ? manifests
             : throw new KeyNotFoundException($"Agent '{agentId}' is not registered.");
 
-    public IReadOnlyCollection<AgentManifest> All => _agents.Values;
+    public IReadOnlyCollection<AgentManifest> All => _agents.Values.SelectMany(x => x).ToList();
 
     // ── Dynamic factory (preferred) ───────────────────────────────────────────
 
@@ -122,8 +136,9 @@ public sealed class AgentRegistry
     public AgentManifest? FindByCapability(string normalizedText)
     {
         var lower = normalizedText.ToLowerInvariant();
-        return _agents.Values.FirstOrDefault(a =>
-            a.Capabilities.Any(cap => CapabilityMatches(cap, lower)));
+        return _agents.Values
+            .SelectMany(list => list)
+            .FirstOrDefault(a => a.Capabilities.Any(cap => CapabilityMatches(cap, lower)));
     }
 
     /// <summary>

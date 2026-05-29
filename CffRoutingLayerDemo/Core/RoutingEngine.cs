@@ -181,9 +181,14 @@ public sealed class RoutingEngine
             intent = intent with { Entities = mergedEntities };
 
             // Stage 5 — Agent Registry Lookup
-            var agent = _registry.Resolve(intent.AgentId);
+
+            var agentManifests = _registry.Resolve(intent.AgentId);
+            var agent = agentManifests.Count == 1
+                ? agentManifests[0]
+                : agentManifests.FirstOrDefault(a => a.Intent == intent.Intent)
+                  ?? agentManifests[0];
             Console.WriteLine(
-                $"  ► Stage 5  Agent registry lookup...        ✓ {agent.AgentId}");
+                $"  ► Stage 5  Agent registry lookup...        ✓ {agent.AgentId} ({agent.Intent})");
 
             // Stage 6 — Execution Plan Generation
             var plan = agent.BuildPlan(intent, context);

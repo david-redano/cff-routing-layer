@@ -10,6 +10,10 @@ examples:
   - "what invoices are outstanding?"
 steps:
   - id: 1
+    action: fetch-invoices
     description: Fetch all invoices matching the query parameters (customer, period, status).
+    dependsOn: []
   - id: 2
+    action: render-invoice-list
     description: Render the invoice list to the user, including key details (date, amount, status, customer).
+    dependsOn: [1]

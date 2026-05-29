@@ -62,10 +62,15 @@ public sealed class CacheWarmer
         foreach (var plan in plans)
         {
             // Resolve the agent so we can build a real ExecutionPlan
+
             AgentManifest agent;
             try
             {
-                agent = _registry.Resolve(plan.AgentId);
+                var agentManifests = _registry.Resolve(plan.AgentId);
+                agent = agentManifests.Count == 1
+                    ? agentManifests[0]
+                    : agentManifests.FirstOrDefault(a => a.Intent == plan.Intent)
+                      ?? agentManifests[0];
             }
             catch (KeyNotFoundException)
             {

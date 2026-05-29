@@ -165,6 +165,23 @@ public sealed class PlanExecutor
 
         switch (step.Action)
         {
+            // ── ListInvoices Plan ──────────────────────────────────────────────
+            case "fetch-invoices":
+                // Mock: Return a summary of fetched invoices (simulate 9 invoices)
+                return $"Fetched 9 invoices for {data.Period} (company: {data.CompanyId})";
+
+            case "render-invoice-list":
+                // Mock: Render a simple invoice list
+                return "Invoice List:\n" +
+                       "  - INV-001 | 2024-04-01 | $1,200 | Acme Corp | Paid\n" +
+                       "  - INV-002 | 2024-04-10 | $2,500 | Beta LLC  | Outstanding\n" +
+                       "  - INV-003 | 2024-04-15 | $900   | Acme Corp | Paid\n" +
+                       "  - INV-004 | 2024-04-20 | $1,100 | Delta Inc | Overdue\n" +
+                       "  - INV-005 | 2024-04-22 | $1,800 | Acme Corp | Outstanding\n" +
+                       "  - INV-006 | 2024-04-25 | $1,000 | Beta LLC  | Paid\n" +
+                       "  - INV-007 | 2024-04-27 | $1,300 | Delta Inc | Outstanding\n" +
+                       "  - INV-008 | 2024-04-28 | $1,700 | Acme Corp | Paid\n" +
+                       "  - INV-009 | 2024-04-29 | $2,000 | Beta LLC  | Outstanding";
             // ── Retrieval ─────────────────────────────────────────────────────
             case "fetch-transactions":
                 return data.Records.Count > 0
