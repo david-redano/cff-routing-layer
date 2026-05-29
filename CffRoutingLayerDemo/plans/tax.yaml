@@ -1,0 +1,30 @@
+planId: tax-001
+intent: EstimateTaxLiability
+agentId: TaxAgent
+displayName: Tax Agent
+description: "Estimate tax liability for a given year and entity type"
+capabilities:
+  - tax
+  - compliance
+defaultEntities:
+  year: "2024"
+  entityType: S-Corp
+  companyId: DEMO-001
+sampleQueries:
+  - "Estimate tax liability for Q2 2024 for Acme Corp S-Corp"
+  - "How much tax do we owe for 2024?"
+  - "Calculate our tax liability for this year"
+  - "What's the estimated tax for an LLC in 2024?"
+steps:
+  - id: 1
+    action: fetch-taxable-income
+    dependsOn: []
+  - id: 2
+    action: apply-deductions
+    dependsOn: [1]
+  - id: 3
+    action: compute-tax-liability
+    dependsOn: [2]
+  - id: 4
+    action: generate-tax-estimate-report
+    dependsOn: [3]

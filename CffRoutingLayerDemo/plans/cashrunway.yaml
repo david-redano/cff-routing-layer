@@ -1,0 +1,31 @@
+planId: runway-001
+intent: ForecastCashRunway
+agentId: CashRunwayAgent
+displayName: Cash Runway Agent
+description: "Forecast months of cash runway at the current burn rate"
+capabilities:
+  - cash-runway
+  - forecasting
+defaultEntities:
+  companyId: DEMO-001
+sampleQueries:
+  - "Forecast cash runway for Acme Corp"
+  - "How many months of runway do we have?"
+  - "What's our burn rate and runway?"
+  - "When will we run out of cash at current spend?"
+steps:
+  - id: 1
+    action: fetch-transactions
+    dependsOn: []
+  - id: 2
+    action: compute-burn-rate
+    dependsOn: [1]
+  - id: 3
+    action: compute-cash-balance
+    dependsOn: [1]
+  - id: 4
+    action: forecast-runway
+    dependsOn: [2, 3]
+  - id: 5
+    action: generate-runway-report
+    dependsOn: [4]

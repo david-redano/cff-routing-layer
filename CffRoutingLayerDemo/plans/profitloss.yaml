@@ -1,0 +1,32 @@
+planId: pl-001
+intent: GenerateProfitLoss
+agentId: ReportingAgent
+displayName: Reporting Agent
+description: "Generate a profit and loss (P&L) statement for a given period"
+capabilities:
+  - profit-loss
+  - reporting
+defaultEntities:
+  period: FY2024
+  companyId: DEMO-001
+sampleQueries:
+  - "Generate a profit and loss report for FY2024"
+  - "Show me the P&L for this year"
+  - "I need the pnl statement for Q3"
+  - "What's our net income for 2024?"
+steps:
+  - id: 1
+    action: fetch-revenue
+    dependsOn: []
+  - id: 2
+    action: fetch-expenses
+    dependsOn: []
+  - id: 3
+    action: compute-gross-profit
+    dependsOn: [1, 2]
+  - id: 4
+    action: compute-net-income
+    dependsOn: [3]
+  - id: 5
+    action: generate-pl-report
+    dependsOn: [4]

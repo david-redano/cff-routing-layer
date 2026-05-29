@@ -1,0 +1,29 @@
+planId: taxopt-001
+intent: OptimizeTaxDeductions
+agentId: TaxOptimizationAgent
+displayName: Tax Optimization Agent
+description: "Identify and rank tax deduction opportunities for a given year"
+capabilities:
+  - tax-optimization
+  - deduction-analysis
+defaultEntities:
+  year: "2024"
+  companyId: DEMO-001
+sampleQueries:
+  - "Optimize tax deductions for Acme Corp for 2024"
+  - "What deductions can we take for this year?"
+  - "Find write-offs for the business in 2024"
+  - "How can we reduce our tax bill this year?"
+steps:
+  - id: 1
+    action: fetch-expenses
+    dependsOn: []
+  - id: 2
+    action: categorize-deductibles
+    dependsOn: [1]
+  - id: 3
+    action: rank-deductions
+    dependsOn: [2]
+  - id: 4
+    action: generate-optimization-report
+    dependsOn: [3]

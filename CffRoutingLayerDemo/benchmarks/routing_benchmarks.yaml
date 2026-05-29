@@ -1,0 +1,36 @@
+benchmarks:
+  - name: "All 8 intents — warm cache"
+    description: "Run all 8 canonical queries with a pre-warmed cache to measure routing latency"
+    queries:
+      - query: "Generate a cash flow report for last month"
+        intent: GenerateCashFlowReport
+      - query: "Create an invoice for TechVentures LLC for $4,500"
+        intent: CreateInvoice
+      - query: "Reconcile account CHK-001 for May"
+        intent: ReconcileAccount
+      - query: "Estimate tax liability for Q2 2024 for Acme Corp S-Corp"
+        intent: EstimateTaxLiability
+      - query: "Generate profit and loss report for FY2024"
+        intent: GenerateProfitLoss
+      - query: "Analyze profit anomaly for Acme Corp last 6 months"
+        intent: AnalyzeProfitAnomaly
+      - query: "Optimize tax deductions for Acme Corp for 2024"
+        intent: OptimizeTaxDeductions
+      - query: "Forecast cash runway for Acme Corp"
+        intent: ForecastCashRunway
+
+  - name: "Cache hit — paraphrase suite"
+    description: "Send paraphrased queries after warm-up to measure cache hit rate and latency"
+    queries:
+      - query: "Show me the cash flow for last month"
+        intent: GenerateCashFlowReport
+        expectCacheHit: true
+      - query: "Bill Acme Corp $3,000 for consulting"
+        intent: CreateInvoice
+        expectCacheHit: true
+      - query: "Run a bank reconciliation for CHK-001"
+        intent: ReconcileAccount
+        expectCacheHit: true
+      - query: "What's our net income for 2024?"
+        intent: GenerateProfitLoss
+        expectCacheHit: true

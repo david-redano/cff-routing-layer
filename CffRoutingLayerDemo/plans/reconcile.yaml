@@ -1,0 +1,33 @@
+planId: reconcile-001
+intent: ReconcileAccount
+agentId: ReconciliationAgent
+displayName: Reconciliation Agent
+description: "Reconcile a bank account against ledger entries for a given period"
+capabilities:
+  - reconciliation
+  - bookkeeping
+defaultEntities:
+  accountId: CHK-001
+  period: May
+  companyId: DEMO-001
+sampleQueries:
+  - "Reconcile account CHK-001 for May"
+  - "Reconcile the checking account for last month"
+  - "Run a bank reconciliation for CHK-001"
+  - "Match bank transactions for CHK-001 against the books"
+steps:
+  - id: 1
+    action: fetch-bank-statement
+    dependsOn: []
+  - id: 2
+    action: fetch-ledger-entries
+    dependsOn: []
+  - id: 3
+    action: match-transactions
+    dependsOn: [1, 2]
+  - id: 4
+    action: flag-discrepancies
+    dependsOn: [3]
+  - id: 5
+    action: generate-reconciliation-report
+    dependsOn: [4]

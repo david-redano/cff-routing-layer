@@ -1,0 +1,31 @@
+planId: cashflow-001
+intent: GenerateCashFlowReport
+agentId: BookkeepingAgent
+displayName: Bookkeeping Agent
+description: "Generate a cash flow report for a given company and period"
+capabilities:
+  - cash-flow
+  - bookkeeping
+defaultEntities:
+  companyId: DEMO-001
+  period: last month
+sampleQueries:
+  - "Generate a cash flow report for last month"
+  - "Show me the cash flow for Acme Corp last month"
+  - "What's the cash position for this quarter?"
+  - "I need a cash flow summary for March"
+steps:
+  - id: 1
+    action: fetch-transactions
+    dependsOn: []
+  - id: 2
+    action: classify-transactions
+    dependsOn: [1]
+    parameters:
+      ledgerType: operating
+  - id: 3
+    action: compute-net-flow
+    dependsOn: [2]
+  - id: 4
+    action: generate-cash-flow-report
+    dependsOn: [3]

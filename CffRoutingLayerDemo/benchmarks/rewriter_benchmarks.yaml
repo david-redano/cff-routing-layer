@@ -1,0 +1,17 @@
+benchmarks:
+  - name: "Cache warmer — normalisation latency"
+    description: "Measure time to normalise + embed all 8 * 4 = 32 sample queries on startup"
+    plansDirectory: plans/
+    note: "With RegexIntentRewriter: < 1ms per query. With LlmIntentRewriter: ~80ms per query (Haiku)."
+
+  - name: "Rewriter comparison"
+    description: "Same 8 queries through RegexIntentRewriter vs LlmIntentRewriter"
+    queries:
+      - "Generate a cash flow report for last month"
+      - "Same account as before but for June"
+      - "Invoice that customer again for $2,200"
+      - "Reconcile the checking account"
+      - "What's our tax situation for this year?"
+      - "Show me the P&L"
+      - "Any deduction opportunities?"
+      - "How long is our runway?"

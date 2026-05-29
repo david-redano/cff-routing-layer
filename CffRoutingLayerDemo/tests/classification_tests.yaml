@@ -1,0 +1,35 @@
+tests:
+  - name: "Cash flow — standard"
+    query: "Generate a cash flow report for last month"
+    expectedIntent: GenerateCashFlowReport
+    expectedAgent: BookkeepingAgent
+
+  - name: "Cash flow — paraphrase"
+    query: "Show me the cash position for Q3"
+    expectedIntent: GenerateCashFlowReport
+    expectedAgent: BookkeepingAgent
+
+  - name: "Cash flow — informal"
+    query: "What's our cash situation this month?"
+    expectedIntent: GenerateCashFlowReport
+    expectedAgent: BookkeepingAgent
+
+  - name: "Invoice — standard"
+    query: "Create an invoice for TechVentures LLC for $4,500"
+    expectedIntent: CreateInvoice
+    expectedAgent: InvoiceAgent
+
+  - name: "Invoice — bill synonym"
+    query: "Bill Acme Corp $3,000 for development services"
+    expectedIntent: CreateInvoice
+    expectedAgent: InvoiceAgent
+
+  - name: "Reconcile — standard"
+    query: "Reconcile account CHK-001 for May"
+    expectedIntent: ReconcileAccount
+    expectedAgent: ReconciliationAgent
+
+  - name: "Reconcile — recon synonym"
+    query: "Run a recon for the savings account last month"
+    expectedIntent: ReconcileAccount
+    expectedAgent: ReconciliationAgent

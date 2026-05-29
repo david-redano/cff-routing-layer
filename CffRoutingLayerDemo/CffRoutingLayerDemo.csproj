@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.BedrockRuntime" Version="4.0.20" />
+    <PackageReference Include="DotNetEnv" Version="3.2.0" />
+    <PackageReference Include="Spectre.Console" Version="0.55.2" />
+    <PackageReference Include="YamlDotNet" Version="18.0.0" />
+  </ItemGroup>
+
+  <!-- Copy YAML resource directories to output so the app can load them at runtime -->
+  <ItemGroup>
+    <None Update="plans\*.yaml"      CopyToOutputDirectory="PreserveNewest" />
+    <None Update="tests\*.yaml"      CopyToOutputDirectory="PreserveNewest" />
+    <None Update="benchmarks\*.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Update=".env"              CopyToOutputDirectory="PreserveNewest" Condition="Exists('.env')" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,31 @@
+planId: audit-001
+intent: AnalyzeProfitAnomaly
+agentId: ProfitAuditAgent
+displayName: Profit Audit Agent
+description: "Analyse profit anomalies using statistical z-score detection"
+capabilities:
+  - profit-audit
+  - anomaly-detection
+defaultEntities:
+  period: last 6 months
+  companyId: DEMO-001
+sampleQueries:
+  - "Analyze profit anomalies for Acme Corp last 6 months"
+  - "Why did our profit spike last March?"
+  - "Flag unusual profit movements for this year"
+  - "Detect revenue anomalies in Q2"
+steps:
+  - id: 1
+    action: fetch-profit-series
+    dependsOn: []
+  - id: 2
+    action: compute-zscore
+    dependsOn: [1]
+  - id: 3
+    action: flag-anomalies
+    dependsOn: [2]
+    parameters:
+      zThreshold: "2.5"
+  - id: 4
+    action: generate-anomaly-report
+    dependsOn: [3]

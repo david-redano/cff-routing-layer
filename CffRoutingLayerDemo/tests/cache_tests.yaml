@@ -1,0 +1,21 @@
+tests:
+  - name: "Cache hit — exact match"
+    firstQuery:  "Generate a cash flow report for last month"
+    secondQuery: "Generate a cash flow report for last month"
+    expectCacheHit: true
+
+  - name: "Cache hit — semantic paraphrase"
+    firstQuery:  "Generate a cash flow report for last month"
+    secondQuery: "Show me cash flow for last month"
+    expectCacheHit: true
+
+  - name: "Cache miss — different intent"
+    firstQuery:  "Generate a cash flow report for last month"
+    secondQuery: "Reconcile account CHK-001 for May"
+    expectCacheHit: false
+
+  - name: "Cache hit — PII-stripped paraphrase"
+    firstQuery:  "Create an invoice for TechVentures LLC for $4,500"
+    secondQuery: "Create an invoice for Global Corp for $1,200"
+    expectCacheHit: true
+    note: "Both normalise to 'create an invoice for ${customer} ${amount}'"
