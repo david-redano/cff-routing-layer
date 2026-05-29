@@ -35,6 +35,7 @@ public static class ConsoleRenderer
             .AddRow("[yellow]cache[/]",    "Show semantic cache contents")
             .AddRow("[yellow]clear[/]",    "Clear conversation history")
             .AddRow("[yellow]config[/]",   "Show current configuration")
+            .AddRow("[yellow]stats[/]",    "Show session statistics (LLM calls, latency, cache hit rate)")
             .AddRow("[yellow]help[/]",     "Show this help")
             .AddRow("[yellow]exit[/]",     "Quit the demo");
 
@@ -120,5 +121,59 @@ public static class ConsoleRenderer
     {
         var label = cached ? "[green]CACHED[/]" : "[cyan1]FRESH[/]";
         AnsiConsole.MarkupLine($"  [grey]Completed in[/] [bold]{elapsed.TotalMilliseconds:F0} ms[/] {label}");
+    }
+
+    public static void PrintStats(SessionStats s)
+    {
+        if (s.TotalQueries == 0)
+        {
+            AnsiConsole.MarkupLine("[grey]  No queries yet.[/]");
+            return;
+        }
+
+        // ── Routing summary ───────────────────────────────────────────────────
+        var summary = new Table()
+            .Border(TableBorder.Rounded)
+            .Title("[cyan1]Session Statistics[/]")
+            .AddColumn("[bold]Metric[/]")
+            .AddColumn(new TableColumn("[bold]Value[/]").RightAligned())
+            .AddRow("Total queries",           $"{s.TotalQueries}")
+            .AddRow("Cache hits",              $"[green]{s.CacheHits}[/]")
+            .AddRow("Cache misses",            $"[cyan1]{s.CacheMisses}[/]")
+            .AddRow("Cache hit rate",          $"[bold]{s.CacheHitRate:P0}[/]")
+            .AddRow("Guardrail rejections",    $"{s.GuardrailRejections}")
+            .AddRow("Streaming fallbacks",     $"{s.StreamingFallbacks}")
+            .AddRow("", "")
+            .AddRow("Avg latency (all)",       $"{s.AvgElapsedMs:F0} ms")
+            .AddRow("Avg latency (cache hit)", $"{s.AvgCacheHitMs:F0} ms")
+            .AddRow("Avg latency (miss/fresh)", $"{s.AvgCacheMissMs:F0} ms")
+            .AddRow("Total executor time",     $"{s.TotalExecutorMs} ms")
+            .AddRow("", "")
+            .AddRow("LLM calls (total)",       $"[yellow]{s.TotalLlmCalls}[/]")
+            .AddRow("  Rewriter calls",        $"{s.LlmRewriterCalls}  [{(s.TotalRewriterMs > 0 ? s.TotalRewriterMs / s.LlmRewriterCalls : 0)} ms avg]")
+            .AddRow("  Classifier calls",      $"{s.LlmClassifierCalls}  [{(s.LlmClassifierCalls > 0 && s.TotalClassifierMs > 0 ? s.TotalClassifierMs / s.LlmClassifierCalls : 0)} ms avg]")
+            .AddRow("  RAG calls",             $"{s.LlmRagCalls}")
+            .AddRow("  Streaming calls",       $"{s.LlmStreamingCalls}");
+
+        AnsiConsole.Write(summary);
+
+        // ── Intent distribution ───────────────────────────────────────────────
+        if (s.IntentCounts.Count > 0)
+        {
+            var dist = new Table()
+                .Border(TableBorder.Rounded)
+                .Title("[cyan1]Intent Distribution[/]")
+                .AddColumn("[bold]Intent[/]")
+                .AddColumn(new TableColumn("[bold]Count[/]").RightAligned())
+                .AddColumn("[bold]Share[/]");
+
+            foreach (var (intent, count) in s.IntentCounts.OrderByDescending(kv => kv.Value))
+            {
+                var bar = new string('█', (int)(count * 20.0 / s.TotalQueries));
+                dist.AddRow(intent, $"{count}", $"[cyan1]{bar}[/] {count * 100.0 / s.TotalQueries:F0}%");
+            }
+
+            AnsiConsole.Write(dist);
+        }
     }
 }

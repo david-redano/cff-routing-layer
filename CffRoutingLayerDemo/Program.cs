@@ -3,6 +3,7 @@ using DotNetEnv;
 using CffRoutingLayerDemo.Bedrock;
 using CffRoutingLayerDemo.Cache;
 using CffRoutingLayerDemo.Classification;
+using CffRoutingLayerDemo.CompanyData;
 using CffRoutingLayerDemo.Config;
 using CffRoutingLayerDemo.Conversation;
 using CffRoutingLayerDemo.Core;
@@ -39,8 +40,11 @@ IIntentRewriter rewriter = config.UseLlmRewriter
     : new RegexIntentRewriter();
 
 var registry  = AgentRegistry.LoadFromPlans(plansDir);
-var executor  = new PlanExecutor();
-var engine    = new RoutingEngine(cache, classifier, registry, executor, rewriter);
+var dataStore = new CompanyDataStore();
+RagSummarizer? ragSummarizer = config.UseBedrockRag ? new RagSummarizer(config) : null;
+var executor  = new PlanExecutor(dataStore, ragSummarizer);
+var stats     = new SessionStats();
+var engine    = new RoutingEngine(cache, classifier, registry, executor, rewriter, stats);
 
 // Streaming fallback (used for Unknown intents)
 var streaming = new BedrockStreamingConversation(config);
@@ -115,6 +119,10 @@ while (!cts.IsCancellationRequested)
                 config.CacheSimilarityThreshold);
             continue;
 
+        case "stats":
+            ConsoleRenderer.PrintStats(stats);
+            continue;
+
         case "compact":
             if (!config.UseBedrockCache && !config.UseLlmRewriter)
             {
@@ -152,10 +160,12 @@ while (!cts.IsCancellationRequested)
             CompanyId:   "DEMO-001",
             Timestamp:   DateTime.UtcNow);
 
-        var result = await engine.HandleAsync(context, history, cts.Token);
+        var (result, fromCache) = await engine.HandleAsync(context, history, cts.Token);
 
         var elapsed = DateTime.UtcNow - started;
-        ConsoleRenderer.PrintMetrics(elapsed, cached: false);
+        var intentForStats = history.Turns.LastOrDefault()?.Intent ?? "";
+        stats.RecordQuery(fromCache, (long)elapsed.TotalMilliseconds, intentForStats);
+        ConsoleRenderer.PrintMetrics(elapsed, cached: fromCache);
 
         // Check if result signals unknown intent → streaming fallback
         if (result.StartsWith("I could not determine"))
@@ -165,6 +175,8 @@ while (!cts.IsCancellationRequested)
             Console.ResetColor();
 
             var streamResult = await streaming.ChatAsync(trimmed, history, cts.Token);
+            stats.RecordStreamingFallback();
+            stats.RecordLlmStreamingCall();
 
             // Record streaming turn in shared history
             history.AddTurn(new ConversationTurn(
@@ -179,7 +191,7 @@ while (!cts.IsCancellationRequested)
         }
         else if (!result.StartsWith("I can only assist"))
         {
-            ConsoleRenderer.PrintResult(result, fromCache: false);
+            ConsoleRenderer.PrintResult(result, fromCache: fromCache);
         }
         else
         {
@@ -256,7 +268,7 @@ static async Task RunDemoScenariosAsync(
             var start = DateTime.UtcNow;
             try
             {
-                var result = await engine.HandleAsync(ctx, history, ct);
+                var (result, fromCache) = await engine.HandleAsync(ctx, history, ct);
                 var elapsed = DateTime.UtcNow - start;
 
                 if (result.StartsWith("I could not determine"))
@@ -273,7 +285,7 @@ static async Task RunDemoScenariosAsync(
                         WasStreamed:       true));
                 }
 
-                ConsoleRenderer.PrintMetrics(elapsed, cached: false);
+                ConsoleRenderer.PrintMetrics(elapsed, cached: fromCache);
                 passed++;
             }
             catch (Exception ex)

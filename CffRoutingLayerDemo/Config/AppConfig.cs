@@ -52,6 +52,14 @@ public sealed class AppConfig
     /// </summary>
     public bool UseBedrockClassifier { get; init; } = false;
 
+    /// <summary>
+    /// When true, final plan-report steps call Claude via <see cref="CffRoutingLayerDemo.Bedrock.RagSummarizer"/>
+    /// to narrate the retrieved financial data (RAG loop).
+    /// When false, a local formatter generates the report without a Bedrock call.
+    /// Default: false (safe for local runs without AWS credentials).
+    /// </summary>
+    public bool UseBedrockRag { get; init; } = false;
+
     // ── Cache ────────────────────────────────────────────────────────────────
 
     /// <summary>Cosine similarity threshold for a semantic cache HIT.</summary>
@@ -78,6 +86,7 @@ public sealed class AppConfig
         UseLlmRewriter          = Bool("USE_LLM_REWRITER",         false),
         UseBedrockCache         = Bool("USE_BEDROCK_CACHE",         false),
         UseBedrockClassifier    = Bool("USE_BEDROCK_CLASSIFIER",    false),
+        UseBedrockRag           = Bool("USE_BEDROCK_RAG",             false),
         CacheSimilarityThreshold = Double("CACHE_SIMILARITY_THRESHOLD", 0.88),
         EmbeddingDimensions     = Int("EMBEDDING_DIMENSIONS",       1536),
         RewriterContextTurns    = Int("REWRITER_CONTEXT_TURNS",     4),

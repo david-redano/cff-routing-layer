@@ -1,6 +1,6 @@
 # CFF Routing Layer
 
-An intent-driven **agent routing layer** for accounting and finance workflows, built on .NET 9 and AWS Bedrock. Natural-language queries are normalised, classified, and dispatched to the appropriate agent — each producing a structured, multi-step execution plan derived entirely from YAML. No C# change is needed to add a new intent or agent.
+An intent-driven **agent routing layer** for accounting and finance workflows, built on .NET 9 and AWS Bedrock. Natural-language queries are normalised, classified, and dispatched to the appropriate agent — each producing a structured, multi-step execution plan derived entirely from YAML. Execution steps retrieve real financial records from `CompanyDataStore` and, when enabled, generate LLM-narrated reports via a RAG loop (Retrieve → Augment → Generate). No C# change is needed to add a new intent or agent.
 
 ---
 
@@ -15,6 +15,8 @@ An intent-driven **agent routing layer** for accounting and finance workflows, b
   - [Intent Classifier](#intent-classifier)
   - [Agent Registry](#agent-registry)
   - [Execution Plans](#execution-plans)
+  - [Company Data Store](#company-data-store)
+  - [RAG Summarizer](#rag-summarizer)
   - [Conversation History](#conversation-history)
 - [YAML Plan Schema](#yaml-plan-schema)
 - [Registered Agents](#registered-agents)
@@ -44,6 +46,8 @@ User message
 │  Stage 5  Agent Registry Lookup                         │
 │  Stage 6  Execution Plan Generation (from YAML)         │
 │  Stage 7  Plan Execution + Cache Store                  │
+│           ↳ CompanyDataStore (retrieve)                 │
+│           ↳ RagSummarizer   (generate, optional)        │
 └─────────────────────────────────────────────────────────┘
      │
      ▼
@@ -70,7 +74,8 @@ cff-routing-layer/
 │   │   ├── BedrockSemanticCache.cs       # Bedrock-backed semantic cache
 │   │   ├── BedrockStreamingConversation.cs  # Streaming fallback for Unknown intents
 │   │   ├── CanonicalPhrases.cs           # Intent ↔ AgentId map (loaded from plans)
-│   │   └── LlmIntentRewriter.cs          # Claude Haiku rewriter with runtime context
+│   │   ├── LlmIntentRewriter.cs          # Claude Haiku rewriter with runtime context
+│   │   └── RagSummarizer.cs              # Claude Haiku RAG report generation
 │   │
 │   ├── Cache/
 │   │   ├── CacheEntry.cs                 # Cache record (vector, intent, plan, timestamp)
@@ -104,9 +109,13 @@ cff-routing-layer/
 │   │   ├── IntentRewriter.cs             # Regex rewriter (local mode)
 │   │   └── RewrittenIntent.cs            # Rewriter output record
 │   │
+│   ├── CompanyData/
+│   │   ├── FinancialRecord.cs            # Income/Expense record (record type)
+│   │   └── CompanyDataStore.cs           # In-memory ledger (40 seeded records)
+│   │
 │   ├── Plans/
 │   │   ├── PlanDefinition.cs             # YAML model (includes YamlPlanStep)
-│   │   ├── PlanExecutor.cs               # Simulates step execution
+│   │   ├── PlanExecutor.cs               # Data-driven step execution + RAG
 │   │   ├── PlanLoader.cs                 # YamlDotNet deserialization
 │   │   └── PlanStepResult.cs             # Per-step result record
 │   │
@@ -210,7 +219,11 @@ Output: `ExecutionPlan { PlanId, Intent, Steps[] }` where each `PlanStep` has a 
 
 ### Stage 7 — Execute & Cache
 
-`PlanExecutor.ExecuteAsync()` runs each step (currently simulated), respecting the `DependsOn` ordering. The normalised text, `IntentResult`, and `ExecutionPlan` are stored in the semantic cache for future hits. The completed turn is appended to `ConversationHistory`.
+`PlanExecutor.ExecuteAsync()` runs each step in topological order (respecting `DependsOn`), then stores the result in the semantic cache and appends the turn to `ConversationHistory`.
+
+**Data retrieval:** before steps run, `CompanyDataStore.GetTransactions(companyId, period)` fetches all matching financial records for the resolved period. Every step receives this pre-fetched `ExecutionData` (records, current balance, period, company ID) so computed values — net flow, burn rate, tax liability, runway — are derived from real seeded transactions, not stub strings.
+
+**RAG generation (optional):** report steps (`generate-cash-flow-report`, `generate-pl-report`, `generate-runway-report`) detect a live `RagSummarizer` and, when present, pass the retrieved records as context to Claude Haiku, which narrates a grounded financial narrative. When `RagSummarizer` is absent (`USE_BEDROCK_RAG=false`), a local formatter produces the report with no Bedrock call.
 
 ---
 
@@ -261,6 +274,41 @@ record ExecutionPlan(string PlanId, string Intent, List<PlanStep> Steps);
 ```
 
 Steps form a DAG. `PlanExecutor` respects `DependsOn` ordering (currently all steps are simulated sequentially). The `Input` dictionary on each step contains the full merged runtime context: company ID, extracted entities, and any static values from the YAML declaration.
+
+### Company Data Store
+
+`CompanyDataStore` is an in-memory ledger seeded with 40 financial records for company `DEMO-001` spanning January–May 2026:
+
+| Category | Records | Notes |
+|----------|---------|-------|
+| Income — Consulting | 5 | TechVentures LLC, $5 K/month |
+| Income — Licenses | 5 | GlobalCorp, Acme, RetailCo, StartupCo |
+| Expense — Payroll | 5 | $18 K/month |
+| Expense — Rent | 5 | $3.5 K/month |
+| Expense — AWS | 5 | ~$1.1 K/month |
+| Expense — Other | 15 | Marketing, Travel, Insurance, Equipment, Microsoft 365 |
+
+Key aggregate facts baked into the seed data:
+- May net flow: **+$4,390** (positive — best month)
+- April net flow: **−$6,890** (negative — equipment purchase)
+- Q1 2026 net flow: **−$25,460** (ramp-up quarter)
+- Current balance: **$142,500**
+
+`GetTransactions(companyId, period)` understands natural-language period strings: `"last month"`, `"this month"`, `"last 30 days"`, `"last 6 months"`, `"Q1 2026"`, `"March"`, `"FY2024"`, and bare years.
+
+### RAG Summarizer
+
+`RagSummarizer` closes the Retrieve → Augment → Generate loop. It receives the pre-fetched `FinancialRecord` list and calls Claude Haiku with the transactions serialised as the data context:
+
+| Method | Prompt focus |
+|--------|--------------|
+| `SummarizeCashFlowAsync` | Net flow, top inflows/outflows, period trend |
+| `SummarizeProfitLossAsync` | Revenue, COGS estimate, gross margin, net income |
+| `SummarizeRunwayAsync` | Monthly burn rate, runway months from current balance |
+
+Settings: `MaxTokens = 400`, `Temperature = 0.3f`, system prompt instructs Claude to behave as a concise financial analyst using specific dollar amounts with no markdown headers.
+
+Enabled by `USE_BEDROCK_RAG=true`. Falls back transparently to local formatters when disabled.
 
 ### Conversation History
 
@@ -358,8 +406,9 @@ All flags default to `false` (fully local, no AWS required):
 | `USE_LLM_REWRITER` | `RegexIntentRewriter` (< 1 ms) | `LlmIntentRewriter` via Claude Haiku |
 | `USE_BEDROCK_CACHE` | `InMemorySemanticCache` + `EmbeddingSimulator` | `BedrockSemanticCache` + Titan Embeddings V2 |
 | `USE_BEDROCK_CLASSIFIER` | `RuleBasedClassifier` (deterministic) | `BedrockLlmClassifier` via Claude Haiku |
+| `USE_BEDROCK_RAG` | Local formatters (no Bedrock call) | `RagSummarizer` via Claude Haiku — LLM-narrated reports grounded in retrieved transactions |
 
-The three flags are independent and can be combined freely. A common setup for development: `USE_LLM_REWRITER=true` only, to test coreference resolution without incurring embedding or classification costs.
+The four flags are independent and can be combined freely. A common setup for development: `USE_LLM_REWRITER=true` only, to test coreference resolution without incurring embedding or classification costs.
 
 ---
 
@@ -381,6 +430,7 @@ EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0
 USE_LLM_REWRITER=false
 USE_BEDROCK_CACHE=false
 USE_BEDROCK_CLASSIFIER=false
+USE_BEDROCK_RAG=false
 
 # Cache
 CACHE_SIMILARITY_THRESHOLD=0.88   # 0.75 for EmbeddingSimulator, 0.88 for Titan

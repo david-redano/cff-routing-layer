@@ -1,9 +1,11 @@
 // Core/RoutingEngine.cs
 namespace CffRoutingLayerDemo.Core;
 
+using System.Diagnostics;
 using CffRoutingLayerDemo.Cache;
 using CffRoutingLayerDemo.Classification;
 using CffRoutingLayerDemo.Conversation;
+using CffRoutingLayerDemo.Demo;
 using CffRoutingLayerDemo.Normalization;
 using CffRoutingLayerDemo.Plans;
 using CffRoutingLayerDemo.Registry;
@@ -15,6 +17,7 @@ public sealed class RoutingEngine
     private readonly AgentRegistry     _registry;
     private readonly PlanExecutor      _executor;
     private readonly IIntentRewriter   _rewriter;
+    private readonly SessionStats?     _stats;
 
     /// <summary>Exposes the underlying cache (used by Console renderer to list entries).</summary>
     public ISemanticCache Cache => _cache;
@@ -33,13 +36,15 @@ public sealed class RoutingEngine
         IIntentClassifier classifier,
         AgentRegistry registry,
         PlanExecutor executor,
-        IIntentRewriter? rewriter = null)
+        IIntentRewriter? rewriter = null,
+        SessionStats? stats = null)
     {
         _cache      = cache;
         _classifier = classifier;
         _registry   = registry;
         _executor   = executor;
         _rewriter   = rewriter ?? new RegexIntentRewriter();
+        _stats      = stats;
     }
 
     /// <summary>
@@ -47,7 +52,7 @@ public sealed class RoutingEngine
     /// When <paramref name="history"/> is provided the LLM rewriter uses it
     /// for coreference resolution, and the completed turn is appended to it.
     /// </summary>
-    public async Task<string> HandleAsync(
+    public async Task<(string Result, bool FromCache)> HandleAsync(
         RoutingContext context,
         ConversationHistory? history = null,
         CancellationToken ct = default)
@@ -58,11 +63,20 @@ public sealed class RoutingEngine
         // rewriter resolves them. The classifier's "Unknown" result is the fallback.
         bool hasHistory = history is { TotalTurns: > 0 };
         if (!hasHistory && !IsInDomain(context.UserMessage))
-            return "I can only assist with accounting and financial tasks. " +
-                   "Try asking about cash flow, invoices, reconciliation, taxes, or P&L.";
+        {
+            _stats?.RecordGuardrailRejection();
+            return ("I can only assist with accounting and financial tasks. " +
+                   "Try asking about cash flow, invoices, reconciliation, taxes, or P&L.", false);
+        }
 
         // Stage 2 — Intent Rewriter (PII extraction + normalisation + coreference)
+        var rwSw = Stopwatch.StartNew();
         var rewritten = await _rewriter.RewriteAsync(context.UserMessage, history, ct);
+        rwSw.Stop();
+        if (_rewriter is not CffRoutingLayerDemo.Normalization.RegexIntentRewriter)
+            _stats?.RecordLlmRewriterCall(rwSw.ElapsedMilliseconds);
+        else if (_stats is not null && rwSw.ElapsedMilliseconds > 0)
+            _stats.RecordLlmRewriterCall(0); // regex: count 0 ms to keep avg meaningful
         if (rewritten.ExtractedEntities.Count > 0 || rewritten.NormalizedText != context.UserMessage)
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -85,7 +99,10 @@ public sealed class RoutingEngine
             Console.ResetColor();
 
             var enriched = context with { Entities = rewritten.ExtractedEntities };
+            var exSw = Stopwatch.StartNew();
             var cachedResult = await _executor.ExecuteAsync(cached.Plan, enriched, ct);
+            exSw.Stop();
+            _stats?.RecordExecutorMs(exSw.ElapsedMilliseconds);
 
             history?.AddTurn(new ConversationTurn(
                 Timestamp:          DateTime.UtcNow,
@@ -97,7 +114,7 @@ public sealed class RoutingEngine
                 AssistantResponse:  cachedResult,
                 WasStreamed:        false));
 
-            return cachedResult;
+            return (cachedResult, true);
         }
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -105,7 +122,13 @@ public sealed class RoutingEngine
         Console.ResetColor();
 
         // Stage 4 — Intent Classification (on normalised text)
+        var clSw = Stopwatch.StartNew();
         var intent = _classifier.Classify(rewritten.NormalizedText);
+        clSw.Stop();
+        if (_classifier is not CffRoutingLayerDemo.Classification.RuleBasedClassifier)
+            _stats?.RecordLlmClassifierCall(clSw.ElapsedMilliseconds);
+        else if (_stats is not null)
+            _stats.RecordLlmClassifierCall(0);
 
         if (intent.Intent == "Unknown")
         {
@@ -123,7 +146,8 @@ public sealed class RoutingEngine
             }
             else
             {
-                return "I could not determine what you need. Please rephrase your accounting question.";
+                _stats?.RecordGuardrailRejection();
+                return ("I could not determine what you need. Please rephrase your accounting question.", false);
             }
         }
 
@@ -149,14 +173,16 @@ public sealed class RoutingEngine
         Console.WriteLine("  ► Stage 7  Executing plan...");
         Console.ResetColor();
 
+        var execSw = Stopwatch.StartNew();
         var result = await _executor.ExecuteAsync(plan, context with { Entities = mergedEntities }, ct);
+        execSw.Stop();
+        _stats?.RecordExecutorMs(execSw.ElapsedMilliseconds);
 
         _cache.Store(rewritten.NormalizedText, intent, plan);
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("             [Stored in semantic cache]");
         Console.ResetColor();
 
-        // Record turn in conversation history
         history?.AddTurn(new ConversationTurn(
             Timestamp:          DateTime.UtcNow,
             UserMessage:        context.UserMessage,
@@ -167,7 +193,7 @@ public sealed class RoutingEngine
             AssistantResponse:  result,
             WasStreamed:        false));
 
-        return result;
+        return (result, false);
     }
 
     private static bool IsInDomain(string message)
