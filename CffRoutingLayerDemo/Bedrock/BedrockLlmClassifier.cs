@@ -1,6 +1,7 @@
 // Bedrock/BedrockLlmClassifier.cs
 namespace CffRoutingLayerDemo.Bedrock;
 
+using System.Collections.Generic;
 using System.Text.Json;
 using Amazon;
 using Amazon.BedrockRuntime;
@@ -44,13 +45,6 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
 
     public IntentResult Classify(string normalizedText)
         => ClassifyAsync(normalizedText).GetAwaiter().GetResult();
-
-    /// <summary>
-    /// LLM prompt is single-intent by design. Returns the result as a singleton list.
-    /// Multi-intent splitting from LLM output is a future enhancement.
-    /// </summary>
-    public IReadOnlyList<IntentResult> ClassifyAll(string normalizedText)
-        => [Classify(normalizedText)];
 
     public async Task<IntentResult> ClassifyAsync(
         string normalizedText,
@@ -117,4 +111,11 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
     }
 
     public void Dispose() => _client.Dispose();
+
+    /// <summary>
+    /// LLM prompt is single-intent by design. Returns the result as a singleton list.
+    /// Multi-intent splitting from LLM output is a future enhancement.
+    /// </summary>
+    public IReadOnlyList<IntentResult> ClassifyAll(string normalizedText)
+        => [Classify(normalizedText)];
 }
