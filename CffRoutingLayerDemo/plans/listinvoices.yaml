@@ -1,0 +1,15 @@
+# ListInvoices Plan
+intent: ListInvoices
+agentId: InvoiceAgent
+summary: List all invoices for the user or a specified customer, period, or status.
+examples:
+  - "list my invoices"
+  - "show all invoices for last month"
+  - "get invoice history"
+  - "display invoices for Acme Corp"
+  - "what invoices are outstanding?"
+steps:
+  - id: 1
+    description: Fetch all invoices matching the query parameters (customer, period, status).
+  - id: 2
+    description: Render the invoice list to the user, including key details (date, amount, status, customer).

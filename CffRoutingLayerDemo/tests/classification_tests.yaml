@@ -24,6 +24,26 @@ tests:
     expectedIntent: CreateInvoice
     expectedAgent: InvoiceAgent
 
+  - name: "Invoice — list"
+    query: "list my invoices"
+    expectedIntent: ListInvoices
+    expectedAgent: InvoiceAgent
+
+  - name: "Invoice — show all"
+    query: "show all invoices for last month"
+    expectedIntent: ListInvoices
+    expectedAgent: InvoiceAgent
+
+  - name: "Invoice — get history"
+    query: "get invoice history"
+    expectedIntent: ListInvoices
+    expectedAgent: InvoiceAgent
+
+  - name: "Invoice — outstanding"
+    query: "what invoices are outstanding?"
+    expectedIntent: ListInvoices
+    expectedAgent: InvoiceAgent
+
   - name: "Reconcile — standard"
     query: "Reconcile account CHK-001 for May"
     expectedIntent: ReconcileAccount

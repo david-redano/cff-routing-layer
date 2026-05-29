@@ -18,6 +18,9 @@ public sealed class RuleBasedClassifier : IIntentClassifier
 
     private static readonly IntentRule[] Rules =
     [
+        new("ListInvoices", "InvoiceAgent",
+            ["list invoices", "show invoices", "invoice history", "display invoices", "outstanding invoices", "list my invoices", "show all invoices", "get invoice history", "display my invoices", "what invoices are outstanding?", "see invoices", "all invoices"]),
+
         new("GenerateCashFlowReport", "BookkeepingAgent",
             ["cash flow", "cashflow", "inflow", "outflow", "money came in", "money went out", "cash report", "cash position", "cash situation"]),
 
