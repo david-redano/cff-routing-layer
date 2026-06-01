@@ -152,15 +152,19 @@ public sealed class PlanExecutor
         ExecutionData data,
         CancellationToken ct)
     {
-        var entities = context.Entities ?? new Dictionary<string, string>();
-        var account  = Resolve(entities, step.Input, "accountId",      "CHK-001");
-        var customer = Resolve(entities, step.Input, "customer",        "(customer not provided)");
-        var amount   = Resolve(entities, step.Input, "amount",          "(amount not provided)");
-        var year     = Resolve(entities, step.Input, "year",            DateTime.UtcNow.Year.ToString());
-        var qty      = Resolve(entities, step.Input, "quantity",        "");
-        var unitPrice= Resolve(entities, step.Input, "unitPrice",       "");
-        var itemDesc = Resolve(entities, step.Input, "itemDescription", "");
-        var dueDate  = Resolve(entities, step.Input, "dueDate",         "");
+        var entities      = context.Entities ?? new Dictionary<string, string>();
+        var account       = Resolve(entities, step.Input, "accountId",       "CHK-001");
+        var customer      = Resolve(entities, step.Input, "customer",         "(customer not provided)");
+        var amount        = Resolve(entities, step.Input, "amount",           "(amount not provided)");
+        var year          = Resolve(entities, step.Input, "year",             DateTime.UtcNow.Year.ToString());
+        var qty           = Resolve(entities, step.Input, "quantity",         "");
+        var unitPrice     = Resolve(entities, step.Input, "unitPrice",        "");
+        var itemDesc      = Resolve(entities, step.Input, "itemDescription",  "");
+        var dueDate       = Resolve(entities, step.Input, "dueDate",          "");
+        var paymentTerms  = Resolve(entities, step.Input, "paymentTerms",     "");
+        var taxRate       = Resolve(entities, step.Input, "taxRate",          "");
+        var paymentMethod = Resolve(entities, step.Input, "paymentMethod",    "");
+        var discount      = Resolve(entities, step.Input, "discount",         "");
 
         var byCategory = data.Records
             .Where(r => r.Type == RecordType.Expense)
@@ -253,8 +257,10 @@ public sealed class PlanExecutor
 
             case "compute-tax-liability":
             {
-                var taxable = Math.Max(0m, data.TotalIncome * 0.80m - data.TotalExpense);
-                return $"Estimated tax liability: {taxable * 0.21m:C} (21% corp rate on {taxable:C} taxable income)";
+                var taxable  = Math.Max(0m, data.TotalIncome * 0.80m - data.TotalExpense);
+                var rate     = ParseRateOrDefault(taxRate, 21m);
+                var rateLabel = taxRate.Length > 0 ? taxRate : $"{rate:0.##}% corp rate";
+                return $"Estimated tax liability: {taxable * (rate / 100m):C} ({rateLabel} on {taxable:C} taxable income)";
             }
 
             case "forecast-runway":
@@ -271,7 +277,8 @@ public sealed class PlanExecutor
 
             // ── Matching / audit ──────────────────────────────────────────────
             case "match-transactions":
-                return $"Matched {(int)(data.Records.Count * 0.946)}/{data.Records.Count} transactions";
+                return $"Matched {(int)(data.Records.Count * 0.946)}/{data.Records.Count} transactions" +
+                       (paymentMethod.Length > 0 ? $" | method: {paymentMethod}" : "");
 
             case "flag-discrepancies":
                 return $"Flagged {(int)(data.Records.Count * 0.054) + 1} discrepancies for review";
@@ -284,7 +291,12 @@ public sealed class PlanExecutor
             case "apply-tax-rules":
             case "apply-tax-schedule":
             case "apply-tax":
-                return "Applied Schedule C (self-employed) — 8.5% effective rate";
+            {
+                var rate = ParseRateOrDefault(taxRate, 8.5m);
+                return taxRate.Length > 0
+                    ? $"Applied {taxRate} effective rate"
+                    : $"Applied Schedule C (self-employed) — {rate:0.##}% effective rate";
+            }
 
             case "categorize-deductibles":
                 return $"Categorised {data.ExpenseCount} deductible expenses across {byCategory.Count} categories";
@@ -314,16 +326,20 @@ public sealed class PlanExecutor
             {
                 var invoiceTotal = ComputeInvoiceTotal(qty, unitPrice, amount);
                 var lineItem     = BuildLineItemLabel(qty, itemDesc, unitPrice);
+                var discountInfo = discount.Length > 0 ? $" | Discount: {discount}" : "";
+                var termsInfo    = paymentTerms.Length > 0 ? $" | Terms: {paymentTerms}" : "";
                 var dueInfo      = dueDate.Length > 0 ? $" | Due: {dueDate}" : "";
                 return $"Invoice INV-{DateTime.UtcNow:yyMMdd}-{(data.Records.Count % 900) + 100} " +
-                       $"created for {customer}{dueInfo}\n       → {lineItem} — total {invoiceTotal}";
+                       $"created for {customer}{dueInfo}{termsInfo}{discountInfo}\n       \u2192 {lineItem} — total {invoiceTotal}";
             }
 
             case "send-invoice":
             {
                 var invoiceTotal = ComputeInvoiceTotal(qty, unitPrice, amount);
                 var dueInfo      = dueDate.Length > 0 ? $" (due in {dueDate})" : "";
-                return $"Invoice sent to {customer} for {invoiceTotal}{dueInfo}";
+                var termsInfo    = paymentTerms.Length > 0 ? $" | terms: {paymentTerms}" : "";
+                var methodInfo   = paymentMethod.Length > 0 ? $" | method: {paymentMethod}" : "";
+                return $"Invoice sent to {customer} for {invoiceTotal}{dueInfo}{termsInfo}{methodInfo}";
             }
 
             // ── RAG-powered report steps ──────────────────────────────────────
@@ -402,6 +418,17 @@ public sealed class PlanExecutor
         if (stepInput.TryGetValue(key, out var sv) && !IsPlaceholder(sv))
             return sv;
         return fallback;
+    }
+
+    /// <summary>
+    /// Parses a rate string like "21%", "8.5%", or "21" into a decimal percentage value.
+    /// Returns <paramref name="defaultRate"/> when the string is absent or unparseable.
+    /// </summary>
+    private static decimal ParseRateOrDefault(string rateStr, decimal defaultRate)
+    {
+        if (string.IsNullOrEmpty(rateStr)) return defaultRate;
+        var stripped = rateStr.TrimEnd('%').Trim();
+        return decimal.TryParse(stripped, System.Globalization.NumberStyles.Any, null, out var r) ? r : defaultRate;
     }
 
     private static bool IsPlaceholder(string? value) =>

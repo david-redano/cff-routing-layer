@@ -50,8 +50,18 @@ internal sealed class IntentRewriterEngine
         @"\b(\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\s+at\s+(\d+(?:\.\d{2})?)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Standalone unit-price suffix: "400 each", "150 per unit", "$5 apiece", "200 per item"
+    private static readonly Regex _unitPriceSuffixPattern = new(
+        @"(?:\$)?(\d+(?:\.\d{2})?)\s+(?:each|apiece|per\s+unit|per\s+item)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex _dueDatePattern = new(
         @"\bdue\s+(?:date\s+)?in\s+(\d+\s+(?:days?|weeks?|months?))\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Matches "10% off", "15% discount", "10 percent off", "$50 off"
+    private static readonly Regex _discountPattern = new(
+        @"\b(\d+(?:\.\d{1,2})?)\s*(?:%|percent)\s+(?:off|discount)|(?:\$[\d,]+(?:\.\d{2})?)\s+(?:off|discount)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // ── PII extraction rules (order: most-specific first) ─────────────────
@@ -62,9 +72,27 @@ internal sealed class IntentRewriterEngine
         (new Regex(@"\b([A-Z]{2,4}-\d{3,6})\b", RegexOptions.Compiled),
             "${accountId}", "accountId"),
 
+        // Payment terms  e.g. net 30, net-60, COD, due on receipt, 2/10 net 30
+        (new Regex(
+            @"\b(net[\s\-]\d+|due\s+on\s+receipt|cash\s+on\s+delivery|COD|\d+\/\d+\s+net\s+\d+)\b",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            "${paymentTerms}", "paymentTerms"),
+
         // Monetary amounts  e.g. $1,234.56  $500
         (new Regex(@"\$[\d,]+(?:\.\d{2})?", RegexOptions.Compiled),
             "${amount}", "amount"),
+
+        // Tax / interest rate \u2014 "21% corporate rate", "8.5% effective rate", "6% interest rate"
+        (new Regex(
+            @"\b(\d+(?:\.\d{1,2})?%)\s+(?:corporate|effective|tax|interest)\s+rate\b",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            "${taxRate}", "taxRate"),
+
+        // Tax rate \u2014 "tax rate of 21%", "rate of 8.5%"
+        (new Regex(
+            @"\b(?:tax\s+)?rate\s+of\s+(\d+(?:\.\d{1,2})?%)",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            "${taxRate}", "taxRate"),
 
         // Quarter + year  e.g. Q1 2024, Q3 2025
         (new Regex(@"\bQ([1-4])\s*(20\d{2})\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
@@ -91,6 +119,12 @@ internal sealed class IntentRewriterEngine
             @"\b(LLC|S-Corp|C-Corp|sole\s+proprietor|partnership|S\s+Corp|C\s+Corp)\b",
             RegexOptions.Compiled | RegexOptions.IgnoreCase),
             "${entityType}", "entityType"),
+
+        // Payment method — unambiguous terms only ("check" excluded: too many false positives)
+        (new Regex(
+            @"\b(ACH|wire\s+transfer|bank\s+transfer|credit\s+card|debit\s+card|cheque|electronic\s+transfer|Zelle|PayPal)\b",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            "${paymentMethod}", "paymentMethod"),
 
         // Customer / company name: title-case word(s) after relational preposition
         (new Regex(
@@ -133,12 +167,37 @@ internal sealed class IntentRewriterEngine
             text = _invoiceItemPattern.Replace(text, "${quantity} ${itemDescription} at ${unitPrice}");
         }
 
+        // Step 0a′: standalone unit-price suffix "N each", "N per unit", "N apiece", "$N each"
+        // Runs after the "at PRICE" pattern so it only fires when no "at" form was found.
+        if (!entities.ContainsKey("unitPrice"))
+        {
+            var upMatch = _unitPriceSuffixPattern.Match(text);
+            if (upMatch.Success)
+            {
+                entities["unitPrice"] = upMatch.Groups[1].Value;
+                text = _unitPriceSuffixPattern.Replace(text, "${unitPrice} each");
+            }
+        }
+
         // Step 0b: pre-process due-date pattern "due date in N days" / "due in N weeks"
         var dueMatch = _dueDatePattern.Match(text);
         if (dueMatch.Success)
         {
             entities["dueDate"] = dueMatch.Groups[1].Value;
             text = _dueDatePattern.Replace(text, "due ${dueDate}");
+        }
+
+        // Step 0c: pre-process discount — "10% off", "$50 off"
+        // Must run before the monetary-amount rule so the $ value isn't consumed first.
+        var discountMatch = _discountPattern.Match(text);
+        if (discountMatch.Success)
+        {
+            // Prefer the percentage group; fall back to the full $ match
+            var discountVal = discountMatch.Groups[1].Success
+                ? discountMatch.Groups[1].Value + "%"
+                : discountMatch.Value.Split(' ')[0];   // "$50"
+            entities["discount"] = discountVal;
+            text = _discountPattern.Replace(text, "${discount} off");
         }
 
         // Step 1: apply surface normalisation (no entity extraction)

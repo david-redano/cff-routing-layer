@@ -6,34 +6,43 @@ An intent-driven **agent routing layer** for accounting and finance workflows, b
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Solution Structure](#solution-structure)
-- [Seven-Stage Routing Pipeline](#seven-stage-routing-pipeline)
-  - [Stage 1 — Guardrails](#stage-1--guardrails)
-  - [Stage 2 — Intent Rewriter](#stage-2--intent-rewriter)
-  - [Stage 3 — Semantic Cache](#stage-3--semantic-cache)
-  - [Stage 4 — Intent Classification (multi-intent)](#stage-4--intent-classification-multi-intent)
-  - [Stage 4b — Fallback Matching](#stage-4b--fallback-matching)
-  - [Stage 5 — Agent Registry Lookup](#stage-5--agent-registry-lookup)
-  - [Stage 6 — Execution Plan Generation](#stage-6--execution-plan-generation)
-  - [Stage 7 — Execute & Cache](#stage-7--execute--cache)
-- [Component Reference](#component-reference)
-  - [Intent Rewriter](#intent-rewriter)
-  - [Semantic Cache](#semantic-cache)
-  - [Intent Classifier](#intent-classifier)
-  - [Agent Registry](#agent-registry)
-  - [Execution Plans](#execution-plans)
-  - [Company Data Store](#company-data-store)
-  - [RAG Summarizer](#rag-summarizer)
-  - [Conversation History](#conversation-history)
-- [YAML Plan Schema](#yaml-plan-schema)
-- [Registered Agents](#registered-agents)
-- [AWS Bedrock Integration](#aws-bedrock-integration)
-- [Feature Flags](#feature-flags)
-- [Configuration Reference](#configuration-reference)
-- [Getting Started](#getting-started)
-- [Running Tests](#running-tests)
-- [Running Benchmarks](#running-benchmarks)
+- [CFF Routing Layer](#cff-routing-layer)
+  - [Table of Contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Solution Structure](#solution-structure)
+  - [Seven-Stage Routing Pipeline](#seven-stage-routing-pipeline)
+    - [Stage 1 — Guardrails](#stage-1--guardrails)
+    - [Stage 2 — Intent Rewriter](#stage-2--intent-rewriter)
+    - [Stage 3 — Semantic Cache](#stage-3--semantic-cache)
+    - [Stage 4 — Intent Classification (multi-intent)](#stage-4--intent-classification-multi-intent)
+    - [Stage 4b — Fallback Matching](#stage-4b--fallback-matching)
+    - [Stage 5 — Agent Registry Lookup](#stage-5--agent-registry-lookup)
+    - [Stage 6 — Execution Plan Generation](#stage-6--execution-plan-generation)
+    - [Stage 7 — Execute \& Cache](#stage-7--execute--cache)
+  - [Component Reference](#component-reference)
+    - [Intent Rewriter](#intent-rewriter)
+    - [Semantic Cache](#semantic-cache)
+    - [Intent Classifier](#intent-classifier)
+    - [Agent Registry](#agent-registry)
+    - [Execution Plans](#execution-plans)
+    - [Company Data Store](#company-data-store)
+    - [RAG Summarizer](#rag-summarizer)
+    - [Conversation History](#conversation-history)
+  - [YAML Plan Schema](#yaml-plan-schema)
+  - [Registered Agents](#registered-agents)
+  - [AWS Bedrock Integration](#aws-bedrock-integration)
+  - [Feature Flags](#feature-flags)
+  - [Full LLM Mode](#full-llm-mode)
+    - [LLM layer map](#llm-layer-map)
+    - [Stage 2 — entity slots extracted by `LlmIntentRewriter`](#stage-2--entity-slots-extracted-by-llmintentrewriter)
+    - [Stage 3 — semantic cache with Titan Embeddings V2](#stage-3--semantic-cache-with-titan-embeddings-v2)
+    - [Stage 4 — LLM classifier for multi-intent](#stage-4--llm-classifier-for-multi-intent)
+    - [Stage 7 — RAG report generation](#stage-7--rag-report-generation)
+    - [Conversation history and compaction](#conversation-history-and-compaction)
+  - [Configuration Reference](#configuration-reference)
+  - [Getting Started](#getting-started)
+  - [Running Tests](#running-tests)
+  - [Running Benchmarks](#running-benchmarks)
 
 ---
 
@@ -198,7 +207,9 @@ Cosine-similarity lookup on the **normalised text** (never the raw input):
 | Local | `InMemorySemanticCache` + `EmbeddingSimulator` | 0.75 |
 | Live  | `BedrockSemanticCache` + `BedrockEmbeddingProvider` | 0.88 |
 
-A **cache HIT** skips Stages 4–6 entirely and jumps straight to Stage 7 plan execution, reusing the cached `IntentResult` and `ExecutionPlan`.
+A **cache HIT** skips Stages 4–6 entirely and jumps straight to Stage 7 plan execution, reusing the cached `IntentResult` and `ExecutionPlan` **structure**.
+
+> **Slot refresh on cache hit:** the cached plan describes *which steps to run and in what order*. It does **not** carry the previous query's entity values. On every cache hit the plan is re-executed with the current query's freshly-extracted entities (`RewrittenIntent.ExtractedEntities`), so `customer`, `unitPrice`, `dueDate`, and all other slots always reflect the new request — never the query that originally populated the cache.
 
 The cache is **pre-warmed at startup**: `CacheWarmer` iterates each plan's `sampleQueries`, embeds them, and stores entries. This guarantees a hit rate > 0 from the very first query that matches a sample phrase.
 
@@ -270,6 +281,8 @@ Output: `ExecutionPlan { PlanId, Intent, Steps[] }`.
 **Data retrieval:** `CompanyDataStore.GetTransactions(companyId, period)` pre-fetches all matching financial records and makes them available to every step via `ExecutionData { Records, CurrentBalance, Period, CompanyId }`. Computed values (net flow, burn rate, tax liability, runway months) are derived from real seeded records, not stub strings.
 
 **RAG generation (optional):** report steps detect a live `RagSummarizer` and, when present, pass the retrieved records as context to Claude Haiku, which produces a grounded financial narrative. When `USE_BEDROCK_RAG=false`, a local formatter runs with no Bedrock call.
+
+> **Cache hit execution:** when Stage 3 returns a hit, Stage 7 still runs a full execution pass — it does **not** return the previous query's result string. The cached object carries only the plan structure (step list, actions, YAML parameters); all slot values (`customer`, `amount`, `unitPrice`, `dueDate`, …) come from the current query's rewritten entities. Two structurally identical queries with different slot values (e.g. invoices for different customers at different prices) therefore always produce different outputs.
 
 ---
 
@@ -495,6 +508,104 @@ All flags default to `false` — the system runs fully offline with no AWS crede
 | `USE_BEDROCK_RAG` | Local formatters (no Bedrock call) | `RagSummarizer` — Claude Haiku-narrated reports grounded in retrieved transactions |
 
 Flags are independent and composable. A common dev setup: `USE_LLM_REWRITER=true` only, to test coreference resolution without embedding or classification costs.
+
+---
+
+## Full LLM Mode
+
+Enabling all four flags activates a Claude Haiku + Titan Embeddings pipeline at every stage where intelligence can improve accuracy. Set in `.env`:
+
+```bash
+USE_LLM_REWRITER=true
+USE_BEDROCK_CACHE=true
+USE_BEDROCK_CLASSIFIER=true
+USE_BEDROCK_RAG=true
+```
+
+### LLM layer map
+
+| Stage | Component | Model | What it adds over local mode |
+|-------|-----------|-------|------------------------------|
+| **2 — Intent Rewriter** | `LlmIntentRewriter` | Claude 3 Haiku | 14-slot entity extraction; coreference resolution; runtime calendar context; surface normalisation |
+| **3 — Semantic Cache** | `BedrockSemanticCache` + `BedrockEmbeddingProvider` | Titan Embeddings V2 (1536-dim) | True semantic similarity at cosine ≥ 0.88; paraphrases hit the cache even when wording is completely different |
+| **4 — Intent Classification** | `BedrockLlmClassifier` | Claude 3 Haiku | True multi-intent: one call returns a JSON array of all triggered intents with confidence scores; handles ambiguous phrasing that defeats keyword scoring |
+| **7 — Report Generation** | `RagSummarizer` | Claude 3 Haiku | Narrative financial summaries grounded in the retrieved transaction records (Retrieve → Augment → Generate) |
+
+### Stage 2 — entity slots extracted by `LlmIntentRewriter`
+
+The rewriter issues a single Claude Haiku call (two `SystemContentBlock`s — static rules + live calendar context) and returns a JSON object with `normalizedText`, `entities`, and `capabilities`. All 14 entity slots are available; the LLM omits a key when the value is absent or unknown.
+
+| Slot | Trigger examples | Accounting use |
+|------|-----------------|----------------|
+| `customer` | "for Acme Corp", "invoice TechVentures LLC" | CreateInvoice, ReconcileAccount |
+| `accountId` | "CHK-001", "SAV-9901" | ReconcileAccount |
+| `amount` | "$4,500", "$1,234.56" | CreateInvoice, cash flow thresholds |
+| `period` | "last month", "Q2 2024", "YTD", "January" | All reporting intents |
+| `year` | "2024", "FY2025" | EstimateTaxLiability, OptimizeTaxDeductions |
+| `entityType` | "LLC", "S-Corp", "sole proprietor" | EstimateTaxLiability |
+| `quantity` | "4 bikes", "10 units" | CreateInvoice line items |
+| `unitPrice` | "at 200" (bare price in invoice context) | CreateInvoice line items |
+| `itemDescription` | "bikes" in "4 bikes at 200" | CreateInvoice line items |
+| `dueDate` | "due date in 7 days", "due in 2 weeks" | CreateInvoice (distinct from `period`) |
+| `paymentTerms` | "net 30", "COD", "due on receipt", "2/10 net 30" | CreateInvoice |
+| `taxRate` | "21% corporate rate", "rate of 8.5%", "tax rate of 15%" | EstimateTaxLiability, apply-tax steps |
+| `paymentMethod` | "ACH", "wire transfer", "credit card", "Zelle" | Transactions, send-invoice |
+| `discount` | "10% off", "15% discount", "$50 off" | CreateInvoice |
+
+> **Guard:** the phrase `profit anomaly` (and any phrase containing "anomaly") is explicitly excluded from the `p&l → "profit and loss"` normalisation rule, preventing misrouting to `GenerateProfitLoss`.
+
+**Runtime calendar context** is injected as a second system block at call time, so relative references resolve against the actual date without any model fine-tuning:
+
+| Reference | Resolved to |
+|-----------|-------------|
+| "today", "now" | Current date |
+| "this month", "MTD" | Current month + year |
+| "last month" | Previous month + year |
+| "this quarter", "current quarter" | Q1–Q4 label + year |
+| "last quarter" | Previous quarter label |
+| "this year", "YTD" | Current fiscal year |
+| "last year" | Previous fiscal year |
+
+### Stage 3 — semantic cache with Titan Embeddings V2
+
+`BedrockSemanticCache` embeds the `normalizedText` (PII-free) using Titan Embeddings V2 (1536 dimensions, normalised cosine). The similarity threshold is configurable:
+
+```bash
+CACHE_SIMILARITY_THRESHOLD=0.88   # recommended for Titan V2
+```
+
+**What is and is not cached:** the cache stores the plan *structure* — the list of steps, their actions, dependency order, and YAML-declared static parameters. It does **not** store entity values. On every hit the plan is re-executed with the current query's freshly-extracted slots, so two queries that normalise to the same template (e.g. `"create an invoice for ${customer} for ${quantity} ${itemDescription} at ${unitPrice}"`) but carry different slot values will always produce different execution outputs.
+
+An **embedding disk cache** (`embeddings_cache.json`) persists every computed vector to the output directory. On the next startup, all previously seen strings are served from disk with zero Bedrock calls, keeping warm-up latency negligible.
+
+### Stage 4 — LLM classifier for multi-intent
+
+`BedrockLlmClassifier` sends the full `CanonicalPhrases.Intents` list and `IntentToAgent` map in its system prompt and parses the response as a JSON array:
+
+```json
+[
+  { "intent": "CreateInvoice",     "confidence": 0.92 },
+  { "intent": "ReconcileAccount",  "confidence": 0.61 }
+]
+```
+
+All entries above the confidence threshold are forwarded to the registry, enabling true parallel multi-intent dispatch in a single Bedrock call.
+
+### Stage 7 — RAG report generation
+
+`RagSummarizer` wraps the Claude Haiku call with the pre-fetched `FinancialRecord` list as the data context:
+
+| Method | Report type |
+|--------|-------------|
+| `SummarizeCashFlowAsync` | Net flow, top inflows/outflows, period trend |
+| `SummarizeProfitLossAsync` | Revenue, COGS estimate, gross margin, net income |
+| `SummarizeRunwayAsync` | Monthly burn rate, runway months from current balance |
+
+Settings: `MaxTokens = 400`, `Temperature = 0.3`. The system prompt instructs the model to behave as a concise financial analyst using specific dollar figures with no markdown headers. Falls back to local formatters transparently when `USE_BEDROCK_RAG=false`.
+
+### Conversation history and compaction
+
+In full LLM mode, `LlmIntentRewriter` receives the last `REWRITER_CONTEXT_TURNS` turns (default 4) to resolve coreferences such as `"same account as before"` or `"do the same for Q3"`. When total turns reach the compaction threshold (15), `CompactAsync()` condenses the oldest turns into a 2–3 sentence summary via Claude Haiku, keeping the active window at 8 turns while preserving semantic continuity.
 
 ---
 

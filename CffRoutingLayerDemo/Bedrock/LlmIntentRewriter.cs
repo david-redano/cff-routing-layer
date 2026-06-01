@@ -37,16 +37,31 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
            - Dollar amounts like $1,234.56 or $500 → ${amount}
            - Invoice line-item quantities (e.g. "4 bikes", "10 units") → the number becomes ${quantity},
              the item name (e.g. "bikes", "units") becomes ${itemDescription}
-           - Unit prices in "at N" invoice context WITHOUT a $ sign (e.g. "at 200", "at 150.50") → ${unitPrice};
-             capture the bare number. Only applies when clearly a per-item price (preceded by a quantity or item name).
-             IMPORTANT: bare numbers are ${unitPrice} only in invoice line-item context ("at N"). Do NOT replace
-             standalone numbers (dates, reference numbers, percentages) with any placeholder.
+           - Unit prices in invoice context → ${unitPrice}; recognised patterns:
+               • "at N" or "at $N"           ("4 bikes at 200", "at $4.99")
+               • "N each" / "N apiece"        ("400 each", "$5 apiece")
+               • "N per unit" / "N per item"  ("150 per unit")
+               • "$N each" / "$N/unit"        ("$200 each")
+             IMPORTANT: bare standalone numbers that are NOT preceded or followed by a price
+             indicator (at/each/per unit/apiece) must NOT be replaced with ${unitPrice}.
+           - COREFERENCE PRECEDENCE: if the current message explicitly states a new value for
+             any entity (customer, amount, unitPrice, quantity, dueDate, etc.), ALWAYS use the
+             current message value. Only resolve from history when the current message contains
+             NO explicit value for that entity.
            - Due dates (e.g. "due date in 7 days", "due in 2 weeks", "due next Friday") → ${dueDate}
              IMPORTANT: use ${dueDate} for invoice due dates, NEVER ${period}. ${period} is ONLY for
              financial reporting windows (last month, Q2 2024, YTD, etc.).
            - Calendar periods (this month, last 30 days, Q2 2024, January, YTD) → ${period}
            - 4-digit fiscal years (2024, 2025) → ${year}
            - Legal entity types (LLC, S-Corp, C-Corp, sole proprietor) → ${entityType}
+           - Payment terms (e.g. "net 30", "net 60", "net-45", "due on receipt", "COD", "2/10 net 30") → ${paymentTerms}
+           - Tax or interest rates explicitly stated (e.g. "21% corporate rate", "8.5% effective rate",
+             "tax rate of 15%", "at 6% interest") → ${taxRate}; capture the numeric value with the % sign.
+             IMPORTANT: do NOT capture percentage discounts ("10% off") as taxRate — those are ${discount}.
+           - Payment method (e.g. "by check", "via ACH", "wire transfer", "credit card", "bank transfer",
+             "cash", "cheque", "Zelle", "PayPal") → ${paymentMethod}
+           - Discounts (e.g. "10% off", "15% discount", "$50 off", "10 percent off") → ${discount};
+             capture the value including the % or $ sign.
 
         2. Surface normalisation (no entity capture — just rename):
            - P&L / pnl / profit & loss → "profit and loss"
@@ -90,7 +105,11 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
                         "quantity": "",
                         "unitPrice": "",
                         "itemDescription": "",
-                        "dueDate": ""
+                        "dueDate": "",
+                        "paymentTerms": "",
+                        "taxRate": "",
+                        "paymentMethod": "",
+                        "discount": ""
                     },
                     "capabilities": ["profit-loss", "reporting"] // array of keywords or features relevant to the user request
                 }
@@ -157,7 +176,7 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
             ],
             InferenceConfig = new InferenceConfiguration
             {
-                MaxTokens   = 300,
+                MaxTokens   = 350,
                 Temperature = 0f   // deterministic
             }
         };
