@@ -1,8 +1,19 @@
 # ListInvoices Plan
+planId: listinvoices-001
 intent: ListInvoices
 agentId: InvoiceAgent
-summary: List all invoices for the user or a specified customer, period, or status.
-examples:
+displayName: Invoice Agent
+description: "List all invoices for the user or a specified customer, period, or status"
+capabilities:
+  - invoicing
+  - billing
+understanding: "List all outstanding or historical invoices optionally filtered by customer, date period, or payment status"
+expectedData:
+  summary:
+    - InvoiceCount
+    - TotalAmount
+    - Currency
+sampleQueries:
   - "list my invoices"
   - "show all invoices for last month"
   - "get invoice history"
@@ -11,9 +22,7 @@ examples:
 steps:
   - id: 1
     action: fetch-invoices
-    description: Fetch all invoices matching the query parameters (customer, period, status).
     dependsOn: []
   - id: 2
     action: render-invoice-list
-    description: Render the invoice list to the user, including key details (date, amount, status, customer).
     dependsOn: [1]

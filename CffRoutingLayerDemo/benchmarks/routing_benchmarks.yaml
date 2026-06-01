@@ -1,11 +1,13 @@
 benchmarks:
-  - name: "All 8 intents — warm cache"
-    description: "Run all 8 canonical queries with a pre-warmed cache to measure routing latency"
+  - name: "All 9 intents — warm cache"
+    description: "Run all 9 canonical queries with a pre-warmed cache to measure routing latency"
     queries:
       - query: "Generate a cash flow report for last month"
         intent: GenerateCashFlowReport
       - query: "Create an invoice for TechVentures LLC for $4,500"
         intent: CreateInvoice
+      - query: "list my invoices"
+        intent: ListInvoices
       - query: "Reconcile account CHK-001 for May"
         intent: ReconcileAccount
       - query: "Estimate tax liability for Q2 2024 for Acme Corp S-Corp"
@@ -48,3 +50,125 @@ benchmarks:
         intent: ReconcileAccount+AnalyzeProfitAnomaly
       - query: "Show me cash flow, profit and loss, and estimate tax liability"
         intent: GenerateCashFlowReport+GenerateProfitLoss+EstimateTaxLiability
+      - query: "List my invoices and tell me how long the cash runway is"
+        intent: ListInvoices+ForecastCashRunway
+      - query: "Reconcile CHK-001, run a P&L, and show cash flow for last month"
+        intent: ReconcileAccount+GenerateProfitLoss+GenerateCashFlowReport
+      - query: "Find tax write-offs and estimate what we owe"
+        intent: OptimizeTaxDeductions+EstimateTaxLiability
+      - query: "Audit any profit anomalies and generate the cash flow report"
+        intent: AnalyzeProfitAnomaly+GenerateCashFlowReport
+      - query: "Show me outstanding invoices, reconcile the bank, and optimize deductions"
+        intent: ListInvoices+ReconcileAccount+OptimizeTaxDeductions
+
+  - name: "Multi-intent — overlapping keywords"
+    description: "Compound queries where keywords could belong to more than one intent; measures classifier disambiguation under ambiguity"
+    queries:
+      - query: "Run cash flow and profit and loss for this year"
+        intent: GenerateCashFlowReport+GenerateProfitLoss
+        note: "'profit' appears in both P&L and anomaly rules — classifier must pick P&L"
+      - query: "Check taxes and anomalies in profit"
+        intent: EstimateTaxLiability+AnalyzeProfitAnomaly
+        note: "Short query with high overlap; both intents should fire"
+      - query: "Invoice TechVentures and list all outstanding invoices"
+        intent: CreateInvoice+ListInvoices
+        note: "Same agent (InvoiceAgent) for two different intents"
+      - query: "Reconcile the bank and forecast runway based on current spend"
+        intent: ReconcileAccount+ForecastCashRunway
+      - query: "Optimize tax deductions and then run the profit and loss"
+        intent: OptimizeTaxDeductions+GenerateProfitLoss
+
+  - name: "Fallback — Understanding-based matching"
+    description: "Queries that don't contain canonical keywords but match via the plan's Understanding field; validates the FindByUnderstanding fallback path"
+    queries:
+      - query: "How much did we spend last month?"
+        intent: GenerateCashFlowReport
+        expectFallback: understanding
+        note: "'spend' matches 'money spent' in Understanding; no direct keyword hit"
+      - query: "Show me what we earned versus what we paid out"
+        intent: GenerateProfitLoss
+        expectFallback: understanding
+      - query: "Are our books matching the bank?"
+        intent: ReconcileAccount
+        expectFallback: understanding
+      - query: "How many months before we're out of money?"
+        intent: ForecastCashRunway
+        expectFallback: understanding
+      - query: "Did our margins change unexpectedly?"
+        intent: AnalyzeProfitAnomaly
+        expectFallback: understanding
+      - query: "What deductions are we eligible for?"
+        intent: OptimizeTaxDeductions
+        expectFallback: understanding
+
+  - name: "Fallback — capability-based matching"
+    description: "Queries with extracted capabilities (e.g. from LLM rewriter) that skip keyword classification; validates the FindByCapability path"
+    queries:
+      - query: "I need the bookkeeping summary"
+        intent: GenerateCashFlowReport
+        expectFallback: capability
+        simulatedCapabilities: [cash-flow, bookkeeping]
+      - query: "Run a compliance check for this year"
+        intent: EstimateTaxLiability
+        expectFallback: capability
+        simulatedCapabilities: [tax, compliance]
+      - query: "I want the anomaly detection report"
+        intent: AnalyzeProfitAnomaly
+        expectFallback: capability
+        simulatedCapabilities: [profit-audit, anomaly-detection]
+      - query: "Something about deduction analysis"
+        intent: OptimizeTaxDeductions
+        expectFallback: capability
+        simulatedCapabilities: [tax-optimization, deduction-analysis]
+
+  - name: "Guardrail rejection"
+    description: "Out-of-domain queries that must be rejected by the domain keyword guardrail without reaching the classifier"
+    queries:
+      - query: "What's the weather in Paris?"
+        intent: Unknown
+        expectRejected: true
+      - query: "Write me a poem about autumn"
+        intent: Unknown
+        expectRejected: true
+      - query: "Book a flight to New York"
+        intent: Unknown
+        expectRejected: true
+      - query: "Who won the 2024 World Cup?"
+        intent: Unknown
+        expectRejected: true
+      - query: "Translate this text to Spanish"
+        intent: Unknown
+        expectRejected: true
+
+  - name: "Cache miss → store → hit cycle"
+    description: "Send a novel query, confirm a miss, then send the same query again to confirm it was stored; validates cache write-through"
+    queries:
+      - query: "Show me operating expenses for last month"
+        intent: GenerateCashFlowReport
+        expectCacheHit: false
+        round: 1
+      - query: "Show me operating expenses for last month"
+        intent: GenerateCashFlowReport
+        expectCacheHit: true
+        round: 2
+
+  - name: "Confidence degradation under paraphrase distance"
+    description: "Progressively more distant paraphrases of a canonical query; measures where the classifier drops below usable confidence"
+    queries:
+      - query: "Generate a cash flow report"
+        intent: GenerateCashFlowReport
+        expectedMinConfidence: 0.90
+      - query: "Show the cash flow"
+        intent: GenerateCashFlowReport
+        expectedMinConfidence: 0.80
+      - query: "What was our cash situation?"
+        intent: GenerateCashFlowReport
+        expectedMinConfidence: 0.70
+      - query: "Money in and out"
+        intent: GenerateCashFlowReport
+        expectedMinConfidence: 0.50
+        expectFallback: understanding
+      - query: "How did we do financially?"
+        intent: GenerateCashFlowReport
+        expectedMinConfidence: 0.30
+        expectFallback: understanding

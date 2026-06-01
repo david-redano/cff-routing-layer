@@ -46,6 +46,14 @@ public sealed class RegexIntentRewriter : IIntentRewriter
 /// </summary>
 internal sealed class IntentRewriterEngine
 {
+    private static readonly Regex _invoiceItemPattern = new(
+        @"\b(\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\s+at\s+(\d+(?:\.\d{2})?)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex _dueDatePattern = new(
+        @"\bdue\s+(?:date\s+)?in\s+(\d+\s+(?:days?|weeks?|months?))\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // ── PII extraction rules (order: most-specific first) ─────────────────
 
     private static readonly (Regex Pattern, string Placeholder, string EntityKey)[] PiiRules =
@@ -113,6 +121,25 @@ internal sealed class IntentRewriterEngine
     {
         var entities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var text     = rawText.Trim();
+
+        // Step 0a: pre-process invoice line-item pattern "N items at PRICE"
+        // Must run before PII rules so quantity/unitPrice aren't swallowed by other rules.
+        var itemMatch = _invoiceItemPattern.Match(text);
+        if (itemMatch.Success)
+        {
+            entities["quantity"]        = itemMatch.Groups[1].Value;
+            entities["itemDescription"] = itemMatch.Groups[2].Value;
+            entities["unitPrice"]       = itemMatch.Groups[3].Value;
+            text = _invoiceItemPattern.Replace(text, "${quantity} ${itemDescription} at ${unitPrice}");
+        }
+
+        // Step 0b: pre-process due-date pattern "due date in N days" / "due in N weeks"
+        var dueMatch = _dueDatePattern.Match(text);
+        if (dueMatch.Success)
+        {
+            entities["dueDate"] = dueMatch.Groups[1].Value;
+            text = _dueDatePattern.Replace(text, "due ${dueDate}");
+        }
 
         // Step 1: apply surface normalisation (no entity extraction)
         foreach (var (pattern, replacement) in NormalisationRules)

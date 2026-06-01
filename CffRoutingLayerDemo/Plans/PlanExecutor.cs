@@ -153,10 +153,14 @@ public sealed class PlanExecutor
         CancellationToken ct)
     {
         var entities = context.Entities ?? new Dictionary<string, string>();
-        var account  = Resolve(entities, step.Input, "accountId",  "CHK-001");
-        var customer = Resolve(entities, step.Input, "customer",   "(customer not provided)");
-        var amount   = Resolve(entities, step.Input, "amount",     "(amount not provided)");
-        var year     = Resolve(entities, step.Input, "year",       DateTime.UtcNow.Year.ToString());
+        var account  = Resolve(entities, step.Input, "accountId",      "CHK-001");
+        var customer = Resolve(entities, step.Input, "customer",        "(customer not provided)");
+        var amount   = Resolve(entities, step.Input, "amount",          "(amount not provided)");
+        var year     = Resolve(entities, step.Input, "year",            DateTime.UtcNow.Year.ToString());
+        var qty      = Resolve(entities, step.Input, "quantity",        "");
+        var unitPrice= Resolve(entities, step.Input, "unitPrice",       "");
+        var itemDesc = Resolve(entities, step.Input, "itemDescription", "");
+        var dueDate  = Resolve(entities, step.Input, "dueDate",         "");
 
         var byCategory = data.Records
             .Where(r => r.Type == RecordType.Expense)
@@ -307,10 +311,20 @@ public sealed class PlanExecutor
                 return $"Customer '{customer}' validated (status: active)";
 
             case "create-invoice-record":
-                return $"Invoice INV-{DateTime.UtcNow:yyMMdd}-{(data.Records.Count % 900) + 100} created for {amount}";
+            {
+                var invoiceTotal = ComputeInvoiceTotal(qty, unitPrice, amount);
+                var lineItem     = BuildLineItemLabel(qty, itemDesc, unitPrice);
+                var dueInfo      = dueDate.Length > 0 ? $" | Due: {dueDate}" : "";
+                return $"Invoice INV-{DateTime.UtcNow:yyMMdd}-{(data.Records.Count % 900) + 100} " +
+                       $"created for {customer}{dueInfo}\n       → {lineItem} — total {invoiceTotal}";
+            }
 
             case "send-invoice":
-                return $"Invoice sent to {customer} for {amount}";
+            {
+                var invoiceTotal = ComputeInvoiceTotal(qty, unitPrice, amount);
+                var dueInfo      = dueDate.Length > 0 ? $" (due in {dueDate})" : "";
+                return $"Invoice sent to {customer} for {invoiceTotal}{dueInfo}";
+            }
 
             // ── RAG-powered report steps ──────────────────────────────────────
             case "generate-cash-flow-report" when _rag is not null:
@@ -393,6 +407,42 @@ public sealed class PlanExecutor
     private static bool IsPlaceholder(string? value) =>
         string.IsNullOrWhiteSpace(value) ||
         (value.StartsWith("${", StringComparison.Ordinal) && value.EndsWith('}'));
+
+    /// <summary>
+    /// Returns a formatted monetary total.
+    /// Prefers quantity × unitPrice when both are available; falls back to amount.
+    /// </summary>
+    private static string ComputeInvoiceTotal(string qty, string unitPrice, string amount)
+    {
+        if (decimal.TryParse(qty,       System.Globalization.NumberStyles.Any, null, out var q) &&
+            decimal.TryParse(unitPrice, System.Globalization.NumberStyles.Any, null, out var up))
+            return $"{q * up:C}";
+
+        if (amount != "(amount not provided)")
+            return amount;
+
+        return "(amount not provided)";
+    }
+
+    /// <summary>
+    /// Builds a human-readable line-item label: "4× bikes @ $200.00" or falls back gracefully.
+    /// </summary>
+    private static string BuildLineItemLabel(string qty, string itemDesc, string unitPrice)
+    {
+        if (string.IsNullOrEmpty(qty) && string.IsNullOrEmpty(itemDesc))
+            return "(no line item detail)";
+
+        var parts = new System.Text.StringBuilder();
+        if (!string.IsNullOrEmpty(qty))       parts.Append($"{qty}×");
+        if (!string.IsNullOrEmpty(itemDesc))  parts.Append($" {itemDesc}");
+        if (!string.IsNullOrEmpty(unitPrice) &&
+            decimal.TryParse(unitPrice, System.Globalization.NumberStyles.Any, null, out var up))
+            parts.Append($" @ {up:C}");
+        else if (!string.IsNullOrEmpty(unitPrice))
+            parts.Append($" @ {unitPrice}");
+
+        return parts.ToString().Trim();
+    }
 
     // ── Local report formatters ───────────────────────────────────────────────
 

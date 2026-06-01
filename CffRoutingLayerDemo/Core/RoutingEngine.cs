@@ -136,11 +136,19 @@ public sealed class RoutingEngine
         {
             // Capability-based fallback: use extracted capabilities if available
             var capable = _registry.FindByCapability(rewritten.NormalizedText, rewritten.Capabilities);
+
+            // Understanding-based fallback: score agents by their natural-language Understanding field
+            capable ??= _registry.FindByUnderstanding(rewritten.NormalizedText);
+
             if (capable is not null && !string.IsNullOrEmpty(capable.Intent))
             {
                 Console.ForegroundColor = ConsoleColor.DarkGray;
+                string matchedBy = capable.Understanding.Length > 0 &&
+                                   _registry.FindByCapability(rewritten.NormalizedText, rewritten.Capabilities) is null
+                    ? $"understanding match [{capable.Understanding[..Math.Min(50, capable.Understanding.Length)]}…]"
+                    : $"capability match [{string.Join(", ", capable.Capabilities)}]";
                 Console.WriteLine(
-                    $"  ► Stage 4b Capability match...             ✓ {capable.AgentId} [{string.Join(", ", capable.Capabilities)}]");
+                    $"  ► Stage 4b Fallback match...                ✓ {capable.AgentId} — {matchedBy}");
                 Console.ResetColor();
                 knownIntents = [new IntentResult(capable.Intent, 0.5,
                     new Dictionary<string, string>(rewritten.ExtractedEntities),

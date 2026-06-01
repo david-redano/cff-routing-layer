@@ -1,0 +1,83 @@
+tests:
+  # ── Two-intent queries ──────────────────────────────────────────────────────
+
+  - name: "Cash flow + Tax liability"
+    query: "Show me cash flow and also what's my tax liability for this year"
+    expectedIntents:
+      - GenerateCashFlowReport
+      - EstimateTaxLiability
+
+  - name: "P&L + Reconcile"
+    query: "Generate a profit and loss report and reconcile account CHK-001"
+    expectedIntents:
+      - GenerateProfitLoss
+      - ReconcileAccount
+
+  - name: "Tax + Cash runway"
+    query: "What are our taxes and how long is our cash runway?"
+    expectedIntents:
+      - EstimateTaxLiability
+      - ForecastCashRunway
+
+  - name: "Reconcile + Profit anomaly"
+    query: "Reconcile the bank statement and analyze any profit anomalies"
+    expectedIntents:
+      - ReconcileAccount
+      - AnalyzeProfitAnomaly
+
+  - name: "Tax optimization + Tax liability"
+    query: "Find tax write-offs and estimate our tax liability"
+    expectedIntents:
+      - OptimizeTaxDeductions
+      - EstimateTaxLiability
+
+  - name: "List invoices + Cash runway"
+    query: "List my invoices and tell me how long the cash runway is"
+    expectedIntents:
+      - ListInvoices
+      - ForecastCashRunway
+
+  - name: "Cash flow + Profit anomaly"
+    query: "Audit any profit anomalies and generate the cash flow report"
+    expectedIntents:
+      - AnalyzeProfitAnomaly
+      - GenerateCashFlowReport
+
+  # ── Three-intent queries ────────────────────────────────────────────────────
+
+  - name: "Cash flow + P&L + Tax"
+    query: "Show me cash flow, profit and loss, and estimate tax liability"
+    expectedIntents:
+      - GenerateCashFlowReport
+      - GenerateProfitLoss
+      - EstimateTaxLiability
+
+  - name: "Reconcile + P&L + Cash flow"
+    query: "Reconcile CHK-001, run a P&L, and show cash flow for last month"
+    expectedIntents:
+      - ReconcileAccount
+      - GenerateProfitLoss
+      - GenerateCashFlowReport
+
+  # ── Ambiguous / overlapping keywords ────────────────────────────────────────
+
+  - name: "Cash flow + P&L — overlapping keyword 'profit'"
+    query: "Run cash flow and profit and loss for this year"
+    expectedIntents:
+      - GenerateCashFlowReport
+      - GenerateProfitLoss
+    note: "'profit' appears in both P&L and anomaly rules"
+
+  - name: "Same-agent dual intents — Create + List invoice"
+    query: "Invoice TechVentures and list all outstanding invoices"
+    expectedIntents:
+      - CreateInvoice
+      - ListInvoices
+    note: "Both resolve to InvoiceAgent"
+
+  - name: "Tax estimation + Tax optimization"
+    query: "Check our tax liability and find tax write-offs"
+    expectedIntents:
+      - EstimateTaxLiability
+      - OptimizeTaxDeductions
+    note: "Both keyword sets need 'tax' prefix - short queries without it only fire one intent"

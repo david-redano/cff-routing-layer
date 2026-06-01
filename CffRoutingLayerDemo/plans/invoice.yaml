@@ -6,6 +6,14 @@ description: "Create an invoice for a customer with a given amount"
 capabilities:
   - invoicing
   - billing
+understanding: "Create and send an invoice to a customer for services or goods with tax applied"
+expectedData:
+  summary:
+    - InvoiceId
+    - Customer
+    - Amount
+    - TaxAmount
+    - Status
 defaultEntities:
   customer: TechVentures LLC
   amount: "$4,500"

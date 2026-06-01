@@ -6,6 +6,13 @@ description: "Reconcile a bank account against ledger entries for a given period
 capabilities:
   - reconciliation
   - bookkeeping
+understanding: "Reconcile a bank account by matching bank statement transactions against ledger entries to find discrepancies"
+expectedData:
+  summary:
+    - MatchedCount
+    - UnmatchedCount
+    - AccountId
+    - Period
 defaultEntities:
   accountId: CHK-001
   period: May

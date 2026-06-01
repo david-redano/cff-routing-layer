@@ -6,6 +6,12 @@ description: "Analyse profit anomalies using statistical z-score detection"
 capabilities:
   - profit-audit
   - anomaly-detection
+understanding: "Detect and analyse profit anomalies or unusual profit movements using statistical z-score methods"
+expectedData:
+  summary:
+    - AnomalyCount
+    - Period
+    - ZScoreThreshold
 defaultEntities:
   period: last 6 months
   companyId: DEMO-001

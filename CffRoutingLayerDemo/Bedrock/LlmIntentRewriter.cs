@@ -34,13 +34,25 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
         1. PII replacement (replace with placeholder, capture real value in entities):
            - Customer/company names after "for", "to", "from", "by" → ${customer}
            - Account IDs like CHK-001, SAV-9901 → ${accountId}
-           - Dollar amounts like $1,234.56 → ${amount}
+           - Dollar amounts like $1,234.56 or $500 → ${amount}
+           - Invoice line-item quantities (e.g. "4 bikes", "10 units") → the number becomes ${quantity},
+             the item name (e.g. "bikes", "units") becomes ${itemDescription}
+           - Unit prices in "at N" invoice context WITHOUT a $ sign (e.g. "at 200", "at 150.50") → ${unitPrice};
+             capture the bare number. Only applies when clearly a per-item price (preceded by a quantity or item name).
+             IMPORTANT: bare numbers are ${unitPrice} only in invoice line-item context ("at N"). Do NOT replace
+             standalone numbers (dates, reference numbers, percentages) with any placeholder.
+           - Due dates (e.g. "due date in 7 days", "due in 2 weeks", "due next Friday") → ${dueDate}
+             IMPORTANT: use ${dueDate} for invoice due dates, NEVER ${period}. ${period} is ONLY for
+             financial reporting windows (last month, Q2 2024, YTD, etc.).
            - Calendar periods (this month, last 30 days, Q2 2024, January, YTD) → ${period}
            - 4-digit fiscal years (2024, 2025) → ${year}
            - Legal entity types (LLC, S-Corp, C-Corp, sole proprietor) → ${entityType}
 
         2. Surface normalisation (no entity capture — just rename):
            - P&L / pnl / profit & loss → "profit and loss"
+             IMPORTANT: "profit anomaly", "profit anomalies", or any phrase containing "anomaly"
+             must NEVER be changed to "profit and loss". Only exact abbreviations
+             (P&L, pnl, p & l) or the phrase "profit & loss" trigger this rule.
            - A/R / accounts receivable → "accounts receivable"
            - A/P / accounts payable → "accounts payable"
            - recon / reconciliation → "reconcile"
@@ -74,7 +86,11 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
                         "amount": "",
                         "period": "",
                         "year": "",
-                        "entityType": ""
+                        "entityType": "",
+                        "quantity": "",
+                        "unitPrice": "",
+                        "itemDescription": "",
+                        "dueDate": ""
                     },
                     "capabilities": ["profit-loss", "reporting"] // array of keywords or features relevant to the user request
                 }
@@ -141,7 +157,7 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
             ],
             InferenceConfig = new InferenceConfiguration
             {
-                MaxTokens   = 200,
+                MaxTokens   = 300,
                 Temperature = 0f   // deterministic
             }
         };

@@ -6,6 +6,12 @@ description: "Identify and rank tax deduction opportunities for a given year"
 capabilities:
   - tax-optimization
   - deduction-analysis
+understanding: "Identify and rank tax deduction opportunities to reduce the tax bill for a given year"
+expectedData:
+  summary:
+    - TotalDeductions
+    - PotentialSavings
+    - Year
 defaultEntities:
   year: "2024"
   companyId: DEMO-001

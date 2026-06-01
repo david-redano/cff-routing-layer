@@ -6,6 +6,14 @@ description: "Generate a cash flow report for a given company and period"
 capabilities:
   - cash-flow
   - bookkeeping
+understanding: "Generate a cash flow report showing money received and spent for a given period"
+expectedData:
+  summary:
+    - TotalIncome
+    - TotalExpense
+    - NetFlow
+    - Period
+    - CompanyId
 defaultEntities:
   companyId: DEMO-001
   period: last month

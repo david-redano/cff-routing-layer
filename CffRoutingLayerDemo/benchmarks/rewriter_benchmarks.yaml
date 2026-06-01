@@ -1,17 +1,44 @@
 benchmarks:
-  - name: "Cache warmer — normalisation latency"
-    description: "Measure time to normalise + embed all 8 * 4 = 32 sample queries on startup"
-    plansDirectory: plans/
-    note: "With RegexIntentRewriter: < 1ms per query. With LlmIntentRewriter: ~80ms per query (Haiku)."
-
-  - name: "Rewriter comparison"
-    description: "Same 8 queries through RegexIntentRewriter vs LlmIntentRewriter"
+  - name: "Rewriter — surface normalisation and PII extraction"
+    description: "Canonical queries that exercise all rewriter paths: PII placeholders, synonym normalisation, abbreviation expansion"
     queries:
-      - "Generate a cash flow report for last month"
-      - "Same account as before but for June"
-      - "Invoice that customer again for $2,200"
-      - "Reconcile the checking account"
-      - "What's our tax situation for this year?"
-      - "Show me the P&L"
-      - "Any deduction opportunities?"
-      - "How long is our runway?"
+      - query: "Generate a cash flow report for last month"
+        intent: GenerateCashFlowReport
+        note: "No PII; relative period extracted"
+      - query: "Create an invoice for TechVentures LLC for $4,500"
+        intent: CreateInvoice
+        note: "Customer name + amount extracted"
+      - query: "Reconcile account CHK-001 for May"
+        intent: ReconcileAccount
+        note: "Account ID + named month extracted"
+      - query: "Estimate tax liability for Q2 2024 for Acme Corp S-Corp"
+        intent: EstimateTaxLiability
+        note: "Quarter+year + customer + entityType extracted"
+      - query: "Generate P&L for FY2024"
+        intent: GenerateProfitLoss
+        note: "P&L abbreviation → 'profit and loss'; fiscal year extracted"
+      - query: "Analyze profit anomaly for Acme Corp last 6 months"
+        intent: AnalyzeProfitAnomaly
+        note: "'profit anomaly' must NOT be normalised to 'profit and loss'"
+      - query: "Optimize tax deductions for Acme Corp for 2024"
+        intent: OptimizeTaxDeductions
+        note: "Customer + year extracted"
+      - query: "Forecast cash runway for Acme Corp"
+        intent: ForecastCashRunway
+        note: "Customer extracted; no period"
+
+  - name: "Rewriter — coreference resolution (LLM rewriter only)"
+    description: "Follow-up queries that require conversation context to resolve entity references; regex rewriter cannot handle these"
+    queries:
+      - query: "Same account as before but for June"
+        intent: ReconcileAccount
+        note: "Coreference: 'same account' → prior accountId"
+      - query: "Invoice that customer again for $2,200"
+        intent: CreateInvoice
+        note: "Coreference: 'that customer' → prior customer"
+      - query: "What's our tax situation for this year?"
+        intent: EstimateTaxLiability
+        note: "Informal phrasing; 'this year' → current fiscal year"
+      - query: "Do the same for Q3"
+        intent: GenerateCashFlowReport
+        note: "Coreference: 'the same' → prior intent + new period"

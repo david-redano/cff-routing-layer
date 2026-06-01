@@ -21,9 +21,16 @@ var config = AppConfig.FromEnvironment();
 // ── Bootstrap CanonicalPhrases from plan YAML files ───────────────────────────
 // Must run before constructing BedrockLlmClassifier or LlmIntentRewriter so
 // their system prompts contain the full, up-to-date intent list.
-var plansDir = Path.Combine(AppContext.BaseDirectory, "plans");
+var plansDir      = Path.Combine(AppContext.BaseDirectory, "plans");
+var benchmarkFile         = Path.Combine(AppContext.BaseDirectory, "benchmarks", "routing_benchmarks.yaml");
+var rewriterBenchmarkFile = Path.Combine(AppContext.BaseDirectory, "benchmarks", "rewriter_benchmarks.yaml");
 if (Directory.Exists(plansDir))
     CanonicalPhrases.LoadFromPlans(plansDir);
+
+// Load demo scenarios from both benchmark YAMLs so the `demo` command
+// always reflects the latest suites without requiring a code change.
+DemoScenarios.LoadFromBenchmarks(benchmarkFile);
+DemoScenarios.LoadFromBenchmarks(rewriterBenchmarkFile);
 
 // ── Build infrastructure ──────────────────────────────────────────────────────
 
@@ -251,6 +258,10 @@ static async Task RunDemoScenariosAsync(
         Console.WriteLine($"  {scenario.Description}");
         Console.ResetColor();
 
+        // Each scenario runs with a fresh conversation history so that
+        // guardrails are not suppressed by turns accumulated in prior scenarios.
+        var scenarioHistory = new ConversationHistory();
+
         foreach (var turn in scenario.Turns)
         {
             Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -268,13 +279,13 @@ static async Task RunDemoScenariosAsync(
             var start = DateTime.UtcNow;
             try
             {
-                var (result, fromCache) = await engine.HandleAsync(ctx, history, ct);
+                var (result, fromCache) = await engine.HandleAsync(ctx, scenarioHistory, ct);
                 var elapsed = DateTime.UtcNow - start;
 
                 if (result.StartsWith("I could not determine"))
                 {
-                    var streamResult = await streaming.ChatAsync(turn.UserMessage, history, ct);
-                    history.AddTurn(new ConversationTurn(
+                    var streamResult = await streaming.ChatAsync(turn.UserMessage, scenarioHistory, ct);
+                    scenarioHistory.AddTurn(new ConversationTurn(
                         Timestamp:         DateTime.UtcNow,
                         UserMessage:       turn.UserMessage,
                         NormalizedMessage: turn.UserMessage,
@@ -303,7 +314,7 @@ static async Task RunDemoScenariosAsync(
     Console.WriteLine("\n═══════════════════════════════════════════════════════════════");
     Console.WriteLine($"  DEMO COMPLETE — {passed} passed, {failed} failed");
     Console.WriteLine($"  Total time: {totalElapsed.TotalSeconds:F1}s");
-    Console.WriteLine($"  History: {history.TotalTurns} turns recorded");
+    Console.WriteLine($"  History: {history.TotalTurns} turns in main session");
     Console.WriteLine("═══════════════════════════════════════════════════════════════");
     Console.ResetColor();
 

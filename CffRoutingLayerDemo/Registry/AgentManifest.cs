@@ -15,6 +15,16 @@ public sealed class AgentManifest
     public string Intent         { get; init; } = "";
     public string[] Capabilities { get; init; } = [];
 
+    // ── Reasoning fields (from <Reasoning> block) ─────────────────────────
+
+    /// <summary>Natural-language description of what the plan does.
+    /// Used as a semantic signal when keyword and capability matching both fail.</summary>
+    public string   Understanding        { get; init; } = "";
+
+    /// <summary>Top-level summary field names from ExpectedData (e.g. TotalExpenses, Currency).
+    /// Matching against these boosts the Understanding score for queries that name expected outputs.</summary>
+    public string[] ExpectedSummaryFields { get; init; } = [];
+
     /// <summary>
     /// Build a domain-specific execution plan for the given intent + context.
     /// Override by providing a custom <see cref="PlanFactory"/>; otherwise

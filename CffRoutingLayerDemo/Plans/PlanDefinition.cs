@@ -5,6 +5,10 @@ namespace CffRoutingLayerDemo.Plans;
 /// YAML-deserialisable plan definition.  Contains everything needed to
 /// register an agent and build its execution plan at runtime — no C# code
 /// change is required when adding a new agent/intent.
+///
+/// The <c>Understanding</c> and <c>ExpectedData.Summary</c> fields mirror the
+/// &lt;Reasoning&gt; block of the canonical plan format and are used for intent
+/// matching when keyword classification and capability matching both fail.
 /// </summary>
 public sealed class PlanDefinition
 {
@@ -14,6 +18,18 @@ public sealed class PlanDefinition
     public string DisplayName    { get; set; } = "";
     public string Description    { get; set; } = "";
     public List<string> Capabilities { get; set; } = [];
+
+    // ── Reasoning fields (from <Reasoning> block) ─────────────────────────
+
+    /// <summary>Natural-language description of what the plan does.
+    /// Maps to &lt;Reasoning&gt; → Understanding.</summary>
+    public string Understanding { get; set; } = "";
+
+    /// <summary>Describes the output data shape of the plan.
+    /// Maps to &lt;Reasoning&gt; → ExpectedData.</summary>
+    public ExpectedDataDefinition ExpectedData { get; set; } = new();
+
+    // ── Existing runtime fields ────────────────────────────────────────────
 
     /// <summary>Default entity values injected into step parameters.</summary>
     public Dictionary<string, string> DefaultEntities { get; set; } = [];
@@ -25,18 +41,57 @@ public sealed class PlanDefinition
     public List<YamlPlanStep> Steps { get; set; } = [];
 }
 
-/// <summary>A single step as declared in a YAML plan file.</summary>
+/// <summary>
+/// Describes the expected output shape of a plan.
+/// Maps to &lt;Reasoning&gt; → ExpectedData.
+/// </summary>
+public sealed class ExpectedDataDefinition
+{
+    /// <summary>Top-level summary field names (e.g. TotalExpenses, Currency).</summary>
+    public List<string> Summary { get; set; } = [];
+}
+
+/// <summary>A single step as declared in a YAML plan file.
+/// Supports both the legacy action-based format and the canonical
+/// Tool / Code step format from &lt;Response&gt; &lt;Step&gt; blocks.</summary>
 public sealed class YamlPlanStep
 {
     /// <summary>1-based step identifier (must be unique within the plan).</summary>
     public int Id { get; set; }
 
-    /// <summary>Action name passed to <see cref="PlanExecutor"/>.</summary>
+    // ── Legacy format ──────────────────────────────────────────────────────
+
+    /// <summary>Action name passed to <see cref="PlanExecutor"/> (legacy format).</summary>
     public string Action { get; set; } = "";
 
-    /// <summary>Step IDs this step must wait for before executing.</summary>
+    /// <summary>Step IDs this step must wait for before executing (legacy format).</summary>
     public List<int> DependsOn { get; set; } = [];
 
     /// <summary>Static parameters declared in YAML; runtime values are merged in at build time.</summary>
     public Dictionary<string, string> Parameters { get; set; } = [];
+
+    // ── Canonical format (Tool / Code steps) ──────────────────────────────
+
+    /// <summary>"Tool" or "Code". Empty means legacy action-based step.</summary>
+    public string StepType { get; set; } = "";
+
+    /// <summary>Tool function name for Tool steps (maps to Action).</summary>
+    public string ToolName { get; set; } = "";
+
+    /// <summary>Key-value input pairs for Tool steps (alternative to Parameters).</summary>
+    public List<KeyValueEntry> Input { get; set; } = [];
+
+    /// <summary>Entry-point function name for Code steps (maps to Action).</summary>
+    public string FunctionName { get; set; } = "";
+
+    /// <summary>ID of the next step in a linear chain (canonical format).
+    /// Used to derive DependsOn when DependsOn is empty.</summary>
+    public int? NextStep { get; set; }
+}
+
+/// <summary>A key/value input parameter for a canonical Tool step.</summary>
+public sealed class KeyValueEntry
+{
+    public string Key   { get; set; } = "";
+    public string Value { get; set; } = "";
 }

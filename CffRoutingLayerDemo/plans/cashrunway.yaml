@@ -6,6 +6,13 @@ description: "Forecast months of cash runway at the current burn rate"
 capabilities:
   - cash-runway
   - forecasting
+understanding: "Forecast how many months of cash runway remain at the current burn rate"
+expectedData:
+  summary:
+    - RunwayMonths
+    - BurnRate
+    - CurrentBalance
+    - Period
 defaultEntities:
   companyId: DEMO-001
 sampleQueries:

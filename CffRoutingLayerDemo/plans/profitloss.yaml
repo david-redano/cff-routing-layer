@@ -6,6 +6,14 @@ description: "Generate a profit and loss (P&L) statement for a given period"
 capabilities:
   - profit-loss
   - reporting
+understanding: "Generate a profit and loss statement showing total revenue, operating expenses, gross profit, and net income"
+expectedData:
+  summary:
+    - TotalRevenue
+    - TotalExpenses
+    - GrossProfit
+    - NetIncome
+    - Period
 defaultEntities:
   period: FY2024
   companyId: DEMO-001

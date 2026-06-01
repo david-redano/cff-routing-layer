@@ -57,12 +57,14 @@ public sealed class AgentRegistry
             .Where(p => !string.IsNullOrWhiteSpace(p.AgentId))
             .Select(plan => new AgentManifest
             {
-                AgentId      = plan.AgentId,
-                DisplayName  = string.IsNullOrWhiteSpace(plan.DisplayName) ? plan.AgentId : plan.DisplayName,
-                Description  = plan.Description,
-                Intent       = plan.Intent,
-                Capabilities = [.. plan.Capabilities],
-                PlanFactory  = (intent, ctx) => BuildPlanFromYaml(plan, intent, ctx)
+                AgentId               = plan.AgentId,
+                DisplayName           = string.IsNullOrWhiteSpace(plan.DisplayName) ? plan.AgentId : plan.DisplayName,
+                Description           = plan.Description,
+                Intent                = plan.Intent,
+                Capabilities          = [.. plan.Capabilities],
+                Understanding         = plan.Understanding,
+                ExpectedSummaryFields = [.. plan.ExpectedData.Summary],
+                PlanFactory           = (intent, ctx) => BuildPlanFromYaml(plan, intent, ctx)
             });
 
         var registry = new AgentRegistry(manifests);
@@ -96,6 +98,13 @@ public sealed class AgentRegistry
         if (plan.Steps.Count == 0)
             return FallbackPlan(plan, intent, ctx, runtime);
 
+        // Pre-compute DependsOn from NextStep for canonical-format plans that omit DependsOn.
+        // For each step that declares NextStep = x, step x depends on this step.
+        var nextStepLookup = plan.Steps
+            .Where(s => s.NextStep.HasValue)
+            .GroupBy(s => s.NextStep!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(s => s.Id).ToArray());
+
         var steps = plan.Steps.Select(s =>
         {
             // Merge: runtime base first, then YAML static params override
@@ -103,7 +112,23 @@ public sealed class AgentRegistry
             foreach (var kv in s.Parameters)
                 merged[kv.Key] = kv.Value;
 
-            return new PlanStep(s.Id, s.Action, merged, [.. s.DependsOn]);
+            // Merge canonical Tool step Input key-value list into parameters
+            foreach (var kv in s.Input)
+                merged[kv.Key] = kv.Value;
+
+            // Resolve action name: prefer explicit Action, then ToolName, then FunctionName
+            string action = !string.IsNullOrEmpty(s.Action)   ? s.Action
+                          : !string.IsNullOrEmpty(s.ToolName)  ? s.ToolName
+                          : !string.IsNullOrEmpty(s.FunctionName) ? s.FunctionName
+                          : $"step-{s.Id}";
+
+            // Resolve dependencies: prefer explicit DependsOn, then infer from NextStep graph
+            int[] dependsOn = s.DependsOn.Count > 0
+                ? [.. s.DependsOn]
+                : nextStepLookup.TryGetValue(s.Id, out var inferred) ? inferred
+                : [];
+
+            return new PlanStep(s.Id, action, merged, dependsOn);
         }).ToList();
 
         return new ExecutionPlan(
@@ -125,6 +150,70 @@ public sealed class AgentRegistry
             new PlanStep(2, "execute",        new Dictionary<string, string>(runtime), [1]),
             new PlanStep(3, "generate-report",new Dictionary<string, string>(runtime), [2])
         ]);
+
+    // ── Understanding-based lookup ──────────────────────────────────────────
+
+    /// <summary>
+    /// Score each registered agent by how well its <see cref="AgentManifest.Understanding"/>
+    /// description matches the normalised user query, with a bonus for expected summary
+    /// field names that appear in the query.  Returns the highest-scoring agent whose
+    /// score meets the minimum threshold, or <c>null</c> if none qualifies.
+    /// </summary>
+    public AgentManifest? FindByUnderstanding(string normalizedText)
+    {
+        var lower = normalizedText.ToLowerInvariant();
+        return _agents.Values
+            .SelectMany(list => list)
+            .Select(a => (Agent: a, Score: ScoreByUnderstanding(a, lower)))
+            .Where(x => x.Score >= 0.25)
+            .OrderByDescending(x => x.Score)
+            .Select(x => x.Agent)
+            .FirstOrDefault();
+    }
+
+    private static double ScoreByUnderstanding(AgentManifest agent, string lowerText)
+    {
+        double score = 0;
+
+        if (!string.IsNullOrEmpty(agent.Understanding))
+        {
+            var words = TokenizeText(agent.Understanding)
+                .Where(w => w.Length > 3)
+                .ToArray();
+            if (words.Length > 0)
+                score += (double)words.Count(w => lowerText.Contains(w)) / words.Length;
+        }
+
+        // Bonus: ExpectedData summary field names found in the query
+        foreach (var field in agent.ExpectedSummaryFields)
+        {
+            var parts = SplitPascalCase(field).Where(w => w.Length > 3);
+            if (parts.Any(w => lowerText.Contains(w)))
+                score += 0.05;
+        }
+
+        return score;
+    }
+
+    private static string[] TokenizeText(string text)
+        => text.ToLowerInvariant()
+               .Split([' ', ',', '.', '-', '(', ')', '\'', '"', ':'],
+                      StringSplitOptions.RemoveEmptyEntries);
+
+    private static IEnumerable<string> SplitPascalCase(string text)
+    {
+        var buf = new System.Text.StringBuilder();
+        foreach (char c in text)
+        {
+            if (char.IsUpper(c) && buf.Length > 0)
+            {
+                yield return buf.ToString().ToLowerInvariant();
+                buf.Clear();
+            }
+            buf.Append(c);
+        }
+        if (buf.Length > 0) yield return buf.ToString().ToLowerInvariant();
+    }
 
     // ── Capability-based lookup ─────────────────────────────────────────────
 

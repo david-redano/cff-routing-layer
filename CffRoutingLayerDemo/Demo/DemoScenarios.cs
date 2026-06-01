@@ -1,70 +1,93 @@
 // Demo/DemoScenarios.cs
 namespace CffRoutingLayerDemo.Demo;
 
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
+
 /// <summary>
-/// Pre-set demo scenarios exercising all 8 intents + cache hits + coreference.
-/// Each scenario has a descriptive label and a list of turns.
-/// Multi-turn scenarios show coreference resolution via conversation history.
+/// Demo scenarios loaded from <c>benchmarks/routing_benchmarks.yaml</c>.
+/// Each benchmark suite becomes one <see cref="Scenario"/>; each query
+/// within the suite becomes one <see cref="Turn"/>.
 /// </summary>
 public static class DemoScenarios
 {
     public sealed record Turn(string Label, string UserMessage);
     public sealed record Scenario(string Name, string Description, Turn[] Turns);
 
-    public static readonly Scenario[] All =
-    [
-        new("Cash Flow Report",
-            "Generate a cash flow report for last month",
-            [new("Fresh request", "Generate a cash flow report for Acme Corp last month")]),
+    /// <summary>Active scenario list — populated by <see cref="LoadFromBenchmarks"/>
+    /// at startup. Empty until that call completes.</summary>
+    public static Scenario[] All { get; private set; } = [];
 
-        new("Create Invoice",
-            "Create a new invoice for a customer",
-            [new("Fresh request", "Create an invoice for TechVentures LLC for $4,500 consulting")]),
+    // ── YAML loading ──────────────────────────────────────────────────────────
 
-        new("Reconcile Account",
-            "Reconcile a bank account",
-            [new("Fresh request", "Reconcile account CHK-001 for May")]),
+    private static readonly IDeserializer _deserializer =
+        new DeserializerBuilder()
+            .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .IgnoreUnmatchedProperties()
+            .Build();
 
-        new("Tax Liability",
-            "Estimate quarterly tax liability",
-            [new("Fresh request", "Estimate tax liability for Q2 2024 for Acme Corp S-Corp")]),
+    /// <summary>
+    /// Load scenarios from <paramref name="yamlPath"/> and append to <see cref="All"/>.
+    /// Suites with no queries are skipped.  Falls back silently if the file is missing.
+    /// </summary>
+    public static void LoadFromBenchmarks(string yamlPath)
+    {
+        if (!File.Exists(yamlPath))
+            return;
 
-        new("Profit & Loss",
-            "Generate a P&L statement",
-            [new("Fresh request", "Generate profit and loss report for FY2024")]),
+        var file = _deserializer.Deserialize<BenchmarkFile>(File.ReadAllText(yamlPath));
 
-        new("Profit Anomaly",
-            "Analyse profit anomalies",
-            [new("Fresh request", "Analyze profit anomaly for Acme Corp last 6 months")]),
+        var scenarios = file.Benchmarks
+            .Where(s => s.Queries.Count > 0)
+            .Select(suite => new Scenario(
+                suite.Name,
+                suite.Description,
+                suite.Queries
+                    .Select((q, i) =>
+                    {
+                        var label = !string.IsNullOrEmpty(q.Intent)
+                            ? q.Intent
+                            : $"Query {i + 1}";
+                        if (!string.IsNullOrEmpty(q.Note))
+                            label += $"  [{q.Note}]";
+                        if (q.ExpectCacheHit)
+                            label += "  (expect cache hit)";
+                        if (q.ExpectRejected)
+                            label += "  (expect rejection)";
+                        if (!string.IsNullOrEmpty(q.ExpectFallback))
+                            label += $"  (fallback: {q.ExpectFallback})";
+                        return new Turn(label, q.Query);
+                    })
+                    .ToArray()))
+            .ToArray();
 
-        new("Tax Optimisation",
-            "Optimise tax deductions",
-            [new("Fresh request", "Optimize tax deductions for Acme Corp for 2024")]),
+        if (scenarios.Length > 0)
+            All = [..All, ..scenarios];
+    }
 
-        new("Cash Runway",
-            "Forecast cash runway",
-            [new("Fresh request", "Forecast cash runway for Acme Corp")]),
+    // ── YAML model (private) ──────────────────────────────────────────────────
 
-        new("Cache Hit Demo",
-            "Paraphrase of earlier cash flow request — should hit semantic cache",
-            [new("Paraphrase (cache hit)", "Show me the cash flow summary for last month for Acme")]),
+    private sealed class BenchmarkFile
+    {
+        public List<BenchmarkSuite> Benchmarks { get; set; } = [];
+    }
 
-        new("Coreference — Account",
-            "Coreference resolution across turns (requires LLM rewriter)",
-            [
-                new("Turn 1 — establish context",  "Reconcile account CHK-001 for May"),
-                new("Turn 2 — coreference 'same'", "Now reconcile the same account for June"),
-            ]),
+    private sealed class BenchmarkSuite
+    {
+        public string              Name        { get; set; } = "";
+        public string              Description { get; set; } = "";
+        public List<BenchmarkQuery> Queries    { get; set; } = [];
+    }
 
-        new("Coreference — Customer",
-            "Customer coreference resolution across turns",
-            [
-                new("Turn 1 — establish context",  "Create an invoice for TechVentures LLC for $4,500"),
-                new("Turn 2 — coreference 'them'", "Create another invoice for them for $2,200"),
-            ]),
-
-        new("Out-of-domain → Streaming",
-            "Out-of-domain question handled by streaming fallback",
-            [new("Streamed", "What's the best way to negotiate vendor contracts?")]),
-    ];
+    private sealed class BenchmarkQuery
+    {
+        public string Query                    { get; set; } = "";
+        public string Intent                   { get; set; } = "";
+        public bool   ExpectCacheHit           { get; set; }
+        public bool   ExpectRejected           { get; set; }
+        public string ExpectFallback           { get; set; } = "";
+        public string Note                     { get; set; } = "";
+        public int    Round                    { get; set; }
+        public double ExpectedMinConfidence    { get; set; }
+    }
 }
