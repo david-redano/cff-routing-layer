@@ -134,9 +134,8 @@ public sealed class RoutingEngine
 
         if (knownIntents.Count == 0)
         {
-            // Capability-based fallback: scan registered agents for a capability
-            // keyword that appears in the normalised message.
-            var capable = _registry.FindByCapability(rewritten.NormalizedText);
+            // Capability-based fallback: use extracted capabilities if available
+            var capable = _registry.FindByCapability(rewritten.NormalizedText, rewritten.Capabilities);
             if (capable is not null && !string.IsNullOrEmpty(capable.Intent))
             {
                 Console.ForegroundColor = ConsoleColor.DarkGray;

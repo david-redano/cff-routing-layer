@@ -26,13 +26,17 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
 
     {{string.Join(", ", CanonicalPhrases.Intents)}}
 
+    Valid capabilities:
+    {{string.Join(", ", CanonicalPhrases.Capabilities)}}
+
     Rules:
     - Only classify messages that are clearly and unambiguously about a supported accounting or finance task.
     - If the message is vague, generic, ambiguous, or does not mention a concrete accounting/finance action, return an empty array (no intent).
     - Do NOT infer intent from generic commands (e.g., "run this", "do it now", "run the report", "run the balance sheet") or from requests that do not specify a clear accounting/finance task.
-    - Return JSON only: [ { "intent": "...", "confidence": 0.0-1.0, "agentId": "..." } , ... ]
+    - Return JSON only: [ { "intent": "...", "confidence": 0.0-1.0, "agentId": "...", "capabilities": ["..."] } , ... ]
     - confidence: 1.0 = certain, 0.7 = likely, 0.5 = uncertain.
     - agentId: use the agent mapped to the intent (see canonical list); empty string for Unknown.
+    - capabilities: array of keywords or features relevant to the user request. Only use from the valid capabilities list above.
     - Do NOT include markdown or prose.
 
     Intent → AgentId mappings:
@@ -100,16 +104,26 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
             var intent     = root.GetProperty("intent").GetString() ?? "Unknown";
             var confidence = root.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5;
             var agentId    = root.TryGetProperty("agentId", out var a) ? a.GetString() ?? "" : "";
+            var capabilities = new List<string>();
+            if (root.TryGetProperty("capabilities", out var caps) && caps.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var cap in caps.EnumerateArray())
+                {
+                    var val = cap.GetString();
+                    if (!string.IsNullOrWhiteSpace(val) && CanonicalPhrases.Capabilities.Contains(val, StringComparer.OrdinalIgnoreCase))
+                        capabilities.Add(val);
+                }
+            }
 
             if (!CanonicalPhrases.Intents.Contains(intent)) intent = "Unknown";
 
             return new IntentResult(intent, confidence,
-                new Dictionary<string, string>(), agentId, false);
+                new Dictionary<string, string>(), agentId, false, false, capabilities);
         }
         catch
         {
             return new IntentResult("Unknown", 0.0,
-                new Dictionary<string, string>(), "", false);
+                new Dictionary<string, string>(), "", false, false, new List<string>());
         }
     }
 
@@ -174,8 +188,18 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
                     var intent     = elem.GetProperty("intent").GetString() ?? "Unknown";
                     var confidence = elem.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5;
                     var agentId    = elem.TryGetProperty("agentId", out var a) ? a.GetString() ?? "" : "";
+                    var capabilities = new List<string>();
+                    if (elem.TryGetProperty("capabilities", out var caps) && caps.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var cap in caps.EnumerateArray())
+                        {
+                            var val = cap.GetString();
+                            if (!string.IsNullOrWhiteSpace(val) && CanonicalPhrases.Capabilities.Contains(val, StringComparer.OrdinalIgnoreCase))
+                                capabilities.Add(val);
+                        }
+                    }
                     if (!CanonicalPhrases.Intents.Contains(intent)) intent = "Unknown";
-                    results.Add(new IntentResult(intent, confidence, new Dictionary<string, string>(), agentId, false));
+                    results.Add(new IntentResult(intent, confidence, new Dictionary<string, string>(), agentId, false, false, capabilities));
                 }
             }
             else
@@ -184,14 +208,24 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
                 var intent     = doc.RootElement.GetProperty("intent").GetString() ?? "Unknown";
                 var confidence = doc.RootElement.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0.5;
                 var agentId    = doc.RootElement.TryGetProperty("agentId", out var a) ? a.GetString() ?? "" : "";
+                var capabilities = new List<string>();
+                if (doc.RootElement.TryGetProperty("capabilities", out var caps) && caps.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var cap in caps.EnumerateArray())
+                    {
+                        var val = cap.GetString();
+                        if (!string.IsNullOrWhiteSpace(val) && CanonicalPhrases.Capabilities.Contains(val, StringComparer.OrdinalIgnoreCase))
+                            capabilities.Add(val);
+                    }
+                }
                 if (!CanonicalPhrases.Intents.Contains(intent)) intent = "Unknown";
-                results.Add(new IntentResult(intent, confidence, new Dictionary<string, string>(), agentId, false));
+                results.Add(new IntentResult(intent, confidence, new Dictionary<string, string>(), agentId, false, false, capabilities));
             }
-            return results.Count > 0 ? results : [new IntentResult("Unknown", 0.0, new Dictionary<string, string>(), "", false)];
+            return results.Count > 0 ? results : [new IntentResult("Unknown", 0.0, new Dictionary<string, string>(), "", false, false, new List<string>())];
         }
         catch
         {
-            return [new IntentResult("Unknown", 0.0, new Dictionary<string, string>(), "", false)];
+            return [new IntentResult("Unknown", 0.0, new Dictionary<string, string>(), "", false, false, new List<string>())];
         }
     }
 }

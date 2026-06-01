@@ -7,5 +7,6 @@ public record IntentResult(
     Dictionary<string, string> Entities,
     string AgentId,
     bool RequiresConfirmation,
-    bool FromCache = false
+    bool FromCache = false,
+    IReadOnlyList<string>? Capabilities = null
 );

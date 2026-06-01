@@ -138,6 +138,22 @@ internal sealed class IntentRewriterEngine
         // Step 3: collapse multiple spaces
         text = Regex.Replace(text, @"\s{2,}", " ").Trim();
 
-        return new RewrittenIntent(rawText, text, entities);
+        // Step 4: extract capabilities (simple keyword match)
+        var capabilities = new List<string>();
+        var lowered = text.ToLowerInvariant();
+        if (lowered.Contains("profit and loss") || lowered.Contains("p&l") || lowered.Contains("pnl"))
+            capabilities.Add("profit-loss");
+        if (lowered.Contains("invoice") || lowered.Contains("billing"))
+            capabilities.Add("invoice");
+        if (lowered.Contains("accounts receivable") || lowered.Contains("a/r"))
+            capabilities.Add("accounts-receivable");
+        if (lowered.Contains("accounts payable") || lowered.Contains("a/p"))
+            capabilities.Add("accounts-payable");
+        if (lowered.Contains("reconcile"))
+            capabilities.Add("reconciliation");
+        if (lowered.Contains("report"))
+            capabilities.Add("reporting");
+
+        return new RewrittenIntent(rawText, text, entities, capabilities);
     }
 }

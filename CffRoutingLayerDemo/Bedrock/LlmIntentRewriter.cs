@@ -65,18 +65,19 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
         5. If nothing needs changing, return the original message as normalizedText.
         6. Omit any entity key where the value is empty or unknown.
 
-        Response format (JSON only):
-        {
-          "normalizedText": "...",
-          "entities": {
-            "customer": "",
-            "accountId": "",
-            "amount": "",
-            "period": "",
-            "year": "",
-            "entityType": ""
-          }
-        }
+                Response format (JSON only):
+                {
+                    "normalizedText": "...",
+                    "entities": {
+                        "customer": "",
+                        "accountId": "",
+                        "amount": "",
+                        "period": "",
+                        "year": "",
+                        "entityType": ""
+                    },
+                    "capabilities": ["profit-loss", "reporting"] // array of keywords or features relevant to the user request
+                }
         """;
 
     /// <summary>
@@ -207,12 +208,23 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
                         entities[prop.Name] = val;
                 }
 
-            return new RewrittenIntent(original, normalizedText, entities);
+            var capabilities = new List<string>();
+            if (root.TryGetProperty("capabilities", out var caps) && caps.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var cap in caps.EnumerateArray())
+                {
+                    var val = cap.GetString();
+                    if (!string.IsNullOrWhiteSpace(val))
+                        capabilities.Add(val);
+                }
+            }
+
+            return new RewrittenIntent(original, normalizedText, entities, capabilities);
         }
         catch
         {
             return new RewrittenIntent(original, original,
-                new Dictionary<string, string>());
+                new Dictionary<string, string>(), new List<string>());
         }
     }
 

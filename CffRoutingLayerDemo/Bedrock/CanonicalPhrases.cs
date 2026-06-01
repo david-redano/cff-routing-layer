@@ -22,7 +22,12 @@ public static class CanonicalPhrases
     public static Dictionary<string, string> IntentToAgent { get; private set; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Bootstraps <see cref="Intents"/> and <see cref="IntentToAgent"/> from the
+    /// All valid capability labels, loaded from plan YAML files.
+    /// </summary>
+    public static string[] Capabilities { get; private set; } = [];
+
+    /// <summary>
+    /// Bootstraps <see cref="Intents"/>, <see cref="IntentToAgent"/>, and <see cref="Capabilities"/> from the
     /// given plans directory.  Call once at application startup before constructing
     /// any LLM classifier or rewriter.
     /// </summary>
@@ -37,8 +42,16 @@ public static class CanonicalPhrases
         // Keep "Unknown" last — it's a sentinel, not a real plan intent
         Intents = [.. IntentToAgent.Keys, "Unknown"];
 
+        // Collect all unique capabilities from all plans
+        Capabilities = plans
+            .Where(p => p.Capabilities != null)
+            .SelectMany(p => p.Capabilities)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToArray();
+
         Console.WriteLine(
-            $"  [CanonicalPhrases] Loaded {IntentToAgent.Count} intent(s) from plans: " +
+            $"  [CanonicalPhrases] Loaded {IntentToAgent.Count} intent(s) and {Capabilities.Length} capability(ies) from plans: " +
             string.Join(", ", IntentToAgent.Keys));
     }
 

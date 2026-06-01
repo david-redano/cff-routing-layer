@@ -129,16 +129,43 @@ public sealed class AgentRegistry
     // ── Capability-based lookup ─────────────────────────────────────────────
 
     /// <summary>
-    /// Find the first agent whose capabilities contain a keyword present in
-    /// <paramref name="normalizedText"/>.  Called when intent classification
-    /// returns Unknown, as a secondary routing path before giving up.
+    /// Find the first agent whose capabilities overlap with the provided list (preferred),
+    /// or fall back to matching keywords in normalizedText if capabilities is null/empty.
     /// </summary>
-    public AgentManifest? FindByCapability(string normalizedText)
+    public AgentManifest? FindByCapability(string normalizedText, IReadOnlyList<string>? extractedCapabilities = null)
     {
+        if (extractedCapabilities != null && extractedCapabilities.Count > 0)
+        {
+            var lowerCaps = extractedCapabilities.Select(c => c.ToLowerInvariant()).ToList();
+            return _agents.Values
+                .SelectMany(list => list)
+                .FirstOrDefault(a =>
+                {
+                    if (a.Capabilities == null)
+                        return false;
+                    var planCaps = a.Capabilities.Select(c => c.ToLowerInvariant()).ToList();
+                    if (planCaps.Count == 0)
+                        return false;
+                    int matchCount = planCaps.Count(cap => lowerCaps.Contains(cap));
+                    double ratio = (double)matchCount / planCaps.Count;
+                    return ratio >= 0.7;
+                });
+        }
+        // Fallback: use normalizedText keyword matching
         var lower = normalizedText.ToLowerInvariant();
         return _agents.Values
             .SelectMany(list => list)
-            .FirstOrDefault(a => a.Capabilities.Any(cap => CapabilityMatches(cap, lower)));
+            .FirstOrDefault(a =>
+            {
+                if (a.Capabilities == null)
+                    return false;
+                var caps = a.Capabilities.ToList();
+                if (caps.Count == 0)
+                    return false;
+                int matchCount = caps.Count(cap => CapabilityMatches(cap, lower));
+                double ratio = (double)matchCount / caps.Count;
+                return ratio >= 0.7;
+            });
     }
 
     /// <summary>
