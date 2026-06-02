@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Compare total sales order amounts between March and April"
 capabilities:
   - sales-orders
-understanding: "Compare total sales order amounts between March and April"
+understanding: "Compare total sales order amounts ${period}"
 expectedData:
   summary:
     - MarchTotal
@@ -20,8 +20,8 @@ defaultEntities:
   dateFrom: "2026-03-01"
   dateTo: "2026-03-31"
 sampleQueries:
-  - "Compare total sales order amounts between March and April"
-  - "Total sales order amounts between March and April?"
+  - "Compare total sales order amounts ${period}"
+  - "Total sales order amounts ${period}?"
 steps:
   - id: 1
     action: sales-list-sales-orders

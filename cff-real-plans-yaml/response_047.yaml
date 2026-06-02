@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Calculate the percentage of sales quotes issued in February that were accepted (converted to Closed status)"
 capabilities:
   - sales-quotes
-understanding: "Calculate the percentage of sales quotes issued in February that were accepted (converted to Closed status)"
+understanding: "Calculate the percentage of sales quotes issued ${period} that were accepted (converted to Closed status)"
 expectedData:
   summary:
     - AcceptancePercentage
@@ -19,8 +19,8 @@ defaultEntities:
   dateFrom: "2026-02-01"
   dateTo: "2026-02-28"
 sampleQueries:
-  - "Calculate the percentage of sales quotes issued in February that were accepted (converted to Closed status)"
-  - "Percentage of sales quotes issued in February that were accepted (converted to?"
+  - "Calculate the percentage of sales quotes issued ${period} that were accepted (converted to Closed status)"
+  - "Percentage of sales quotes issued ${period} that were accepted (converted to?"
 steps:
   - id: 1
     action: sales-list-sales-quotes

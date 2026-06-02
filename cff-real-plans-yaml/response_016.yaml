@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "List all sales orders with reference number 0003 to help user identify the correct one"
 capabilities:
   - sales-orders
-understanding: "List all sales orders with reference number 0003 to help user identify the correct one"
+understanding: "List all sales orders with ref ${refId} to help user identify the correct one"
 expectedData:
   summary:
     - OrderCount
@@ -17,8 +17,8 @@ defaultEntities:
   dateFrom: "2025-05-01"
   dateTo: "2026-05-01"
 sampleQueries:
-  - "List all sales orders with reference number 0003 to help user identify the correct one"
-  - "All sales orders with reference number 0003 to help user identify the correct?"
+  - "List all sales orders with ref ${refId} to help user identify the correct one"
+  - "All sales orders with ref ${refId} to help user identify the correct one?"
 steps:
   - id: 1
     action: sales-list-sales-orders

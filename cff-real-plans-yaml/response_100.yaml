@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Compare the total amount of sales quotes issued in the current period to the same period last year"
 capabilities:
   - sales-quotes
-understanding: "Compare the total amount of sales quotes issued in the current period to the same period last year"
+understanding: "Compare the total amount of sales quotes issued in the current period to the same period ${period}"
 expectedData:
   summary:
     - CurrentPeriodAmount
@@ -22,7 +22,7 @@ defaultEntities:
   dateFrom: "2026-01-01"
   dateTo: "2026-06-01"
 sampleQueries:
-  - "Compare the total amount of sales quotes issued in the current period to the same period last year"
+  - "Compare the total amount of sales quotes issued in the current period to the same period ${period}"
   - "Total amount of sales quotes issued in the current period to the same period?"
 steps:
   - id: 1

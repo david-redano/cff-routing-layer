@@ -1,9 +1,6 @@
 // Bedrock/BedrockDisambiguator.cs
 namespace CffRoutingLayerDemo.Bedrock;
 
-using Amazon;
-using Amazon.BedrockRuntime;
-using Amazon.BedrockRuntime.Model;
 using CffRoutingLayerDemo.Classification;
 using CffRoutingLayerDemo.Config;
 
@@ -14,8 +11,7 @@ using CffRoutingLayerDemo.Config;
 /// </summary>
 public sealed class BedrockDisambiguator : IDisambiguator
 {
-    private readonly string                   _modelId;
-    private readonly AmazonBedrockRuntimeClient _client;
+    private readonly BedrockLlmHelper _llm;
 
     private const string SystemPrompt = """
         You are an intent selector for a financial accounting assistant.
@@ -32,9 +28,7 @@ public sealed class BedrockDisambiguator : IDisambiguator
 
     public BedrockDisambiguator(AppConfig config)
     {
-        _modelId = config.BedrockLlmModelId;
-        _client  = new AmazonBedrockRuntimeClient(
-            RegionEndpoint.GetBySystemName(config.AwsRegion));
+        _llm = new BedrockLlmHelper(config);
     }
 
     /// <inheritdoc/>
@@ -58,29 +52,9 @@ public sealed class BedrockDisambiguator : IDisambiguator
             Which intent matches? Respond with the intent name or none:
             """;
 
-        var request = new ConverseRequest
-        {
-            ModelId = _modelId,
-            System  = [new SystemContentBlock { Text = SystemPrompt }],
-            Messages =
-            [
-                new Message
-                {
-                    Role    = ConversationRole.User,
-                    Content = [new ContentBlock { Text = userContent }]
-                }
-            ],
-            InferenceConfig = new InferenceConfiguration
-            {
-                MaxTokens   = 20,
-                Temperature = 0f
-            }
-        };
-
         try
         {
-            var response = await _client.ConverseAsync(request, ct);
-            var raw      = response.Output?.Message?.Content?.FirstOrDefault()?.Text?.Trim() ?? "";
+            var raw = await _llm.ConverseAsync(SystemPrompt, userContent, maxTokens: 20, ct: ct);
 
             // Accept only an exact candidate name (case-insensitive) or "none"
             if (raw.Equals("none", StringComparison.OrdinalIgnoreCase))

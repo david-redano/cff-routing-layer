@@ -5,7 +5,7 @@ displayName: Accounting Agent
 description: "Calculate total tax paid by the business from the start of the current financial year to today"
 capabilities:
   - accounting-get-income-statement-es
-understanding: "Calculate total tax paid by the business from the start of the current financial year to today"
+understanding: "Calculate total tax paid by the business from the start of the ${period} to today"
 expectedData:
   summary:
     - TaxPaid
@@ -16,8 +16,8 @@ expectedData:
 defaultEntities:
   companyId: DEMO-001
 sampleQueries:
-  - "Calculate total tax paid by the business from the start of the current financial year to today"
-  - "Total tax paid by the business from the start of the current financial year to?"
+  - "Calculate total tax paid by the business from the start of the ${period} to today"
+  - "Total tax paid by the business from the start of the ${period} to today?"
 steps:
   - id: 1
     action: accounting-get-income-statement-es

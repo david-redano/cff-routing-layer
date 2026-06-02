@@ -6,7 +6,7 @@ description: "Retrieve complete details for sales order 0003 belonging to custom
 capabilities:
   - sales-customers
   - sales-orders
-understanding: "Retrieve complete details for sales order 0003 belonging to customer Acme Corporation"
+understanding: "Retrieve complete details for sales order ${orderId} belonging to customer Acme Corporation"
 expectedData:
   summary:
     - OrderReference
@@ -21,8 +21,8 @@ defaultEntities:
   dateFrom: "2025-06-01"
   dateTo: "2026-06-01"
 sampleQueries:
-  - "Retrieve complete details for sales order 0003 belonging to customer Acme Corporation"
-  - "Complete details for sales order 0003 belonging to customer Acme Corporation?"
+  - "Retrieve complete details for sales order ${orderId} belonging to customer Acme Corporation"
+  - "Complete details for sales order ${orderId} belonging to customer Acme?"
 steps:
   - id: 1
     action: sales-list-customers

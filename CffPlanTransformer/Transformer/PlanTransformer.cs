@@ -78,11 +78,16 @@ internal static class PlanTransformer
         sb.AppendLine($"displayName: {displayName}");
         sb.AppendLine($"description: \"{EscapeYaml(plan.Understanding)}\"");
 
+        // Normalized understanding replaces concrete slot values with ${slot} placeholders
+        // so that embeddings generalise across parameter variations (e.g. "last 30 days"
+        // and "last 200 days" produce the same vector as "last ${period}").
+        var normUnderstanding = NormalizeUnderstanding(plan.Understanding);
+
         sb.AppendLine("capabilities:");
         foreach (var cap in capabilities)
             sb.AppendLine($"  - {cap}");
 
-        sb.AppendLine($"understanding: \"{EscapeYaml(plan.Understanding)}\"");
+        sb.AppendLine($"understanding: \"{EscapeYaml(normUnderstanding)}\"");
 
         sb.AppendLine("expectedData:");
         sb.AppendLine("  summary:");
@@ -100,8 +105,8 @@ internal static class PlanTransformer
             sb.AppendLine($"  dateTo: \"{dateTo}\"");
 
         sb.AppendLine("sampleQueries:");
-        sb.AppendLine($"  - \"{EscapeYaml(plan.Understanding)}\"");
-        sb.AppendLine($"  - \"{EscapeYaml(GenerateAltQuery(plan.Understanding))}\"");
+        sb.AppendLine($"  - \"{EscapeYaml(normUnderstanding)}\"");
+        sb.AppendLine($"  - \"{EscapeYaml(GenerateAltQuery(normUnderstanding))}\"");
 
         sb.AppendLine("steps:");
         foreach (var step in plan.Steps)
@@ -174,9 +179,99 @@ internal static class PlanTransformer
         return words.Length > 0 ? string.Concat(words) : "ExecutePlan";
     }
 
+    // ── Understanding normalization ──────────────────────────────────────────
+    // Replace concrete slot values with ${slot} placeholders so embeddings
+    // generalise across parameter variations (e.g. "last 30 days" and
+    // "last 200 days" both become "last ${period}").
+
+    // Relative period phrases — matched before bare years to avoid partial matches
+    private static readonly Regex RxPeriodInText = new(
+        @"\b(last\s+\d+\s+(?:days?|months?|weeks?|years?)" +
+        @"|this\s+month|last\s+month" +
+        @"|year[\s\-]to[\s\-]date|ytd" +
+        @"|last\s+quarter|this\s+quarter" +
+        @"|last\s+year|this\s+year|next\s+year" +
+        @"|last\s+fiscal\s+year|this\s+fiscal\s+year" +
+        @"|Q[1-4]\s+\d{4}" +
+        @"|current\s+(?:financial\s+)?year)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Named-month comparisons: "between March and April", "in March", "during April", "from March to June"
+    private static readonly Regex RxMonthPeriod = new(
+        @"\b(between\s+(?:MONTHS)\s+and\s+(?:MONTHS)|(?:during|in)\s+(?:MONTHS)|from\s+(?:MONTHS)\s+to\s+(?:MONTHS))\b"
+            .Replace("MONTHS", @"(?:January|February|March|April|May|June|July|August|September|October|November|December)"),
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Natural-language dates: "January 15", "16 April", "April 16 2024", "15th January"
+    private static readonly Regex RxNaturalDate = new(
+        @"\b(?:(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|\d{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)(?:\s+\d{4})?)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Specific ISO dates (YYYY-MM-DD)
+    private static readonly Regex RxDateInText = new(
+        @"\b\d{4}-\d{2}-\d{2}\b",
+        RegexOptions.Compiled);
+
+    // Bare fiscal/calendar years not inside a period phrase (e.g. "FY2024", "2024")
+    private static readonly Regex RxYearInText = new(
+        @"\b(?:FY)?(20\d{2})\b",
+        RegexOptions.Compiled);
+
+    // Customer names after contextual keywords ("for customer X", "belonging to X", "for X")
+    // Matches a title-cased name (2–5 capitalised words, possibly with "&" or "and")
+    private static readonly Regex RxCustomerName = new(
+        @"(?<=\b(?:for\s+customer|customer\s+named?|belonging\s+to|for)\s+)" +
+        @"([A-Z][A-Za-z]+(?:\s+(?:[A-Z][A-Za-z]+|&|and))+)",
+        RegexOptions.Compiled);
+
+    // Order / invoice / quote reference numbers.
+    // The captured token MUST look like a reference code (pure digits, or uppercase+digits
+    // like INV-001) so common English words ("date", "details", "value") are never matched.
+    private static readonly Regex RxRefNumber = new(
+        @"\b(?:order|invoice|quote|ref(?:erence)?)\s+(?:number\s+)?(\d+[A-Z0-9\-]*|[A-Z]{2,}\d+[\w\-]*)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Product / item names after "ordered" followed by a frequency/ranking qualifier.
+    // Allows leading lowercase so "iPhones", "iPads" etc. are caught.
+    private static readonly Regex RxProductName = new(
+        @"(?<=\bordered\s+)([A-Za-z][A-Za-z0-9\+®™]{3,20})(?=\s+(?:most|frequently|more|fewer|less|often))",
+        RegexOptions.Compiled);
+
+    // Monetary amounts — $, €, £, ¥ prefixes and optional M/K suffix
+    private static readonly Regex RxAmountInText = new(
+        @"[\$€£¥][\d,]+(?:\.\d+)?(?:[MmKk])?",
+        RegexOptions.Compiled);
+
+    private static string NormalizeUnderstanding(string understanding)
+    {
+        var text = understanding;
+
+        // Period phrases (relative windows first, then named-month comparisons)
+        text = RxPeriodInText.Replace(text, "${period}");
+        text = RxMonthPeriod.Replace(text, "${period}");
+
+        // Dates (natural language before ISO so "January 15" is caught first)
+        text = RxNaturalDate.Replace(text, "${date}");
+        text = RxDateInText.Replace(text, "${date}");
+
+        // Bare years (after period/date replacements to avoid double-matching)
+        text = RxYearInText.Replace(text, "${year}");
+
+        // Entity slot values
+        text = RxAmountInText.Replace(text, "${amount}");
+        text = RxCustomerName.Replace(text, "${customer}");
+        text = RxRefNumber.Replace(text, m =>
+            m.Value.StartsWith("order", StringComparison.OrdinalIgnoreCase)  ? "order ${orderId}" :
+            m.Value.StartsWith("invoice", StringComparison.OrdinalIgnoreCase) ? "invoice ${invoiceId}" :
+            m.Value.StartsWith("quote", StringComparison.OrdinalIgnoreCase)   ? "quote ${quoteId}" :
+            "ref ${refId}");
+        text = RxProductName.Replace(text, "${itemDescription}");
+
+        return text;
+    }
+
     // Leading action verbs stripped before building the alt query
-    private static readonly Regex RxLeadingVerb = new(
-        @"^(Calculate|Identify|Compare|Retrieve|List|Fetch|Find|Show|Get|Determine|Count|Analyse|Analyze|Generate)\s+(the\s+)?(which\s+)?",
+    private static readonly Regex RxLeadingVerb = new(        @"^(Calculate|Identify|Compare|Retrieve|List|Fetch|Find|Show|Get|Determine|Count|Analyse|Analyze|Generate)\s+(the\s+)?(which\s+)?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static string GenerateAltQuery(string understanding)

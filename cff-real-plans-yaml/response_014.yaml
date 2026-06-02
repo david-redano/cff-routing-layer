@@ -6,7 +6,7 @@ description: "Identify which customers have not placed any sales orders within t
 capabilities:
   - sales-customers
   - sales-orders
-understanding: "Identify which customers have not placed any sales orders within the last 30 days"
+understanding: "Identify which customers have not placed any sales orders within the ${period}"
 expectedData:
   summary:
     - TotalCustomers
@@ -19,8 +19,8 @@ defaultEntities:
   dateFrom: "2026-05-02"
   dateTo: "2026-06-01"
 sampleQueries:
-  - "Identify which customers have not placed any sales orders within the last 30 days"
-  - "Customers have not placed any sales orders within the last 30 days?"
+  - "Identify which customers have not placed any sales orders within the ${period}"
+  - "Customers have not placed any sales orders within the ${period}?"
 steps:
   - id: 1
     action: sales-list-customers

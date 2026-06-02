@@ -6,7 +6,7 @@ description: "User wants to retrieve details for a specific sales order identifi
 capabilities:
   - sales-orders
   - sales-get-order
-understanding: "User wants to retrieve details for a specific sales order identified by order number 0003"
+understanding: "User wants to retrieve details for a specific sales order identified by order ${orderId}"
 expectedData:
   summary:
     - OrderNumber
@@ -21,7 +21,7 @@ defaultEntities:
   dateFrom: "2025-06-01"
   dateTo: "2026-06-01"
 sampleQueries:
-  - "User wants to retrieve details for a specific sales order identified by order number 0003"
+  - "User wants to retrieve details for a specific sales order identified by order ${orderId}"
   - "User wants to retrieve details for a specific sales order identified by order?"
 steps:
   - id: 1

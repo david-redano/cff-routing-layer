@@ -7,7 +7,7 @@ capabilities:
   - sales-customers
   - sales-orders
   - sales-get-order
-understanding: "Retrieve complete details for sales order number 0003 belonging to Acme Corporation, issued on January 15, 2024"
+understanding: "Retrieve complete details for sales order ${orderId} belonging to ${customer}, issued on ${date}"
 expectedData:
   summary:
     - OrderNumber
@@ -22,8 +22,8 @@ defaultEntities:
   dateFrom: "2024-01-01"
   dateTo: "2024-01-31"
 sampleQueries:
-  - "Retrieve complete details for sales order number 0003 belonging to Acme Corporation, issued on January 15, 2024"
-  - "Complete details for sales order number 0003 belonging to Acme Corporation,?"
+  - "Retrieve complete details for sales order ${orderId} belonging to ${customer}, issued on ${date}"
+  - "Complete details for sales order ${orderId} belonging to ${customer}, issued on?"
 steps:
   - id: 1
     action: sales-list-customers

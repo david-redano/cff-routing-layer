@@ -6,7 +6,7 @@ description: "Retrieve complete details for sales order number 0003 for customer
 capabilities:
   - sales-customers
   - sales-orders
-understanding: "Retrieve complete details for sales order number 0003 for customer Johnson & Associates"
+understanding: "Retrieve complete details for sales order ${orderId} for customer ${customer}"
 expectedData:
   summary:
     - OrderReference
@@ -19,8 +19,8 @@ expectedData:
 defaultEntities:
   companyId: DEMO-001
 sampleQueries:
-  - "Retrieve complete details for sales order number 0003 for customer Johnson & Associates"
-  - "Complete details for sales order number 0003 for customer Johnson & Associates?"
+  - "Retrieve complete details for sales order ${orderId} for customer ${customer}"
+  - "Complete details for sales order ${orderId} for customer ${customer}?"
 steps:
   - id: 1
     action: sales-list-customers

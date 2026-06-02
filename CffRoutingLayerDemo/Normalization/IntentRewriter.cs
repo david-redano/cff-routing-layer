@@ -115,7 +115,7 @@ internal sealed class IntentRewriterEngine
 
         // Relative periods
         (new Regex(
-            @"\b(last\s+\d+\s+days?|this\s+month|last\s+month|year[\s\-]to[\s\-]date|ytd|last\s+quarter|this\s+quarter)\b",
+            @"\b(last\s+\d+\s+days?|this\s+month|last\s+month|year[\s\-]to[\s\-]date|ytd|last\s+quarter|this\s+quarter|last\s+year|this\s+year|next\s+year|last\s+fiscal\s+year|this\s+fiscal\s+year)\b",
             RegexOptions.Compiled | RegexOptions.IgnoreCase),
             "${period}", "period"),
 

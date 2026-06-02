@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Count the number of sales quotes created during March 2026"
 capabilities:
   - sales-quotes
-understanding: "Count the number of sales quotes created during March 2026"
+understanding: "Count the number of sales quotes created ${period} ${year}"
 expectedData:
   summary:
     - QuoteCount
@@ -17,8 +17,8 @@ defaultEntities:
   dateFrom: "2026-03-01"
   dateTo: "2026-03-31"
 sampleQueries:
-  - "Count the number of sales quotes created during March 2026"
-  - "Number of sales quotes created during March 2026?"
+  - "Count the number of sales quotes created ${period} ${year}"
+  - "Number of sales quotes created ${period} ${year}?"
 steps:
   - id: 1
     action: sales-list-sales-quotes

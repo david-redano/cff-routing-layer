@@ -7,7 +7,7 @@ capabilities:
   - sales-customers
   - sales-orders
   - sales-get-order
-understanding: "Retrieve details for sales order number 0003 for customer TechCorp Solutions with order date January 15, 2024"
+understanding: "Retrieve details for sales order ${orderId} for customer ${customer} with order date ${date}"
 expectedData:
   summary:
     - OrderReference
@@ -22,8 +22,8 @@ defaultEntities:
   dateFrom: "2024-01-01"
   dateTo: "2024-01-31"
 sampleQueries:
-  - "Retrieve details for sales order number 0003 for customer TechCorp Solutions with order date January 15, 2024"
-  - "Details for sales order number 0003 for customer TechCorp Solutions with order?"
+  - "Retrieve details for sales order ${orderId} for customer ${customer} with order date ${date}"
+  - "Details for sales order ${orderId} for customer ${customer} with order date?"
 steps:
   - id: 1
     action: sales-list-customers

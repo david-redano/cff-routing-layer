@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Count the number of sales orders created on 16 April 2026"
 capabilities:
   - sales-orders
-understanding: "Count the number of sales orders created on 16 April 2026"
+understanding: "Count the number of sales orders created on ${date}"
 expectedData:
   summary:
     - OrderCount
@@ -15,8 +15,8 @@ defaultEntities:
   dateFrom: "2026-04-16"
   dateTo: "2026-04-16"
 sampleQueries:
-  - "Count the number of sales orders created on 16 April 2026"
-  - "Number of sales orders created on 16 April 2026?"
+  - "Count the number of sales orders created on ${date}"
+  - "Number of sales orders created on ${date}?"
 steps:
   - id: 1
     action: sales-list-sales-orders

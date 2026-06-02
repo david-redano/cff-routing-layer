@@ -3,9 +3,6 @@ namespace CffRoutingLayerDemo.Bedrock;
 
 using System.Text;
 using System.Text.Json;
-using Amazon;
-using Amazon.BedrockRuntime;
-using Amazon.BedrockRuntime.Model;
 using CffRoutingLayerDemo.Config;
 using CffRoutingLayerDemo.Conversation;
 using CffRoutingLayerDemo.Normalization;
@@ -23,8 +20,7 @@ using CffRoutingLayerDemo.Normalization;
 /// </summary>
 public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
 {
-    private readonly AmazonBedrockRuntimeClient _client;
-    private readonly string _modelId;
+    private readonly BedrockLlmHelper _llm;
 
     private static readonly string SystemPrompt = """
         You are a concise intent normalizer for a financial accounting assistant.
@@ -61,7 +57,13 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
              Only capture dueDate when the message states an actual date, day count, or named
              relative period (e.g. "in 7 days", "next Friday", "7th June").
            - Calendar periods (this month, last 30 days, Q2 2024, January, YTD) → ${period}
-           - 4-digit fiscal years (2024, 2025) → ${year}
+             IMPORTANT: relative year phrases are PERIODS, not bare years:
+               • "last year" → period: "last year"  (NOT year: 2025)
+               • "this year" → period: "this year"
+               • "next year" → period: "next year"
+               Only use ${year} for a bare 4-digit year that is NOT part of a relative phrase
+               (e.g. "FY2024", "in 2025", "for 2024").
+           - 4-digit fiscal years (2024, 2025) when used alone → ${year}
            - Legal entity types (LLC, S-Corp, C-Corp, sole proprietor) → ${entityType}
            - Payment terms (e.g. "net 30", "net 60", "net-45", "due on receipt", "COD", "2/10 net 30") → ${paymentTerms}
            - Tax or interest rates explicitly stated (e.g. "21% corporate rate", "8.5% effective rate",
@@ -148,9 +150,7 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
 
     public LlmIntentRewriter(AppConfig config)
     {
-        _modelId = config.BedrockLlmModelId;
-        _client  = new AmazonBedrockRuntimeClient(
-            RegionEndpoint.GetBySystemName(config.AwsRegion));
+        _llm = new BedrockLlmHelper(config);
     }
 
     /// <inheritdoc/>
@@ -162,33 +162,13 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
         var context = history?.BuildContext(recentCount: 4);
         var userContent = BuildUserContent(rawText, context);
 
-        var request = new ConverseRequest
-        {
-            ModelId = _modelId,
-            System  =
-            [
-                new SystemContentBlock { Text = SystemPrompt },
-                new SystemContentBlock { Text = BuildRuntimeContext() }
-            ],
-            Messages =
-            [
-                new Message
-                {
-                    Role    = ConversationRole.User,
-                    Content = [new ContentBlock { Text = userContent }]
-                }
-            ],
-            InferenceConfig = new InferenceConfiguration
-            {
-                MaxTokens   = 500,
-                Temperature = 0f   // deterministic
-            }
-        };
-
         try
         {
-            var response = await _client.ConverseAsync(request, ct);
-            var json     = response.Output.Message.Content[0].Text.Trim();
+            var json = await _llm.ConverseAsync(
+                [SystemPrompt, BuildRuntimeContext()],
+                userContent,
+                maxTokens: 500,
+                ct: ct);
             var result   = ParseJson(rawText, json);
 
             // Regex fallback: if the LLM extracted no entity slots (e.g. unusual format
@@ -288,5 +268,5 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
         }
     }
 
-    public void Dispose() => _client.Dispose();
+    public void Dispose() => _llm.Dispose();
 }

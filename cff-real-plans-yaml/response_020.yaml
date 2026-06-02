@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Find sales orders with total amounts exceeding €1,000"
 capabilities:
   - sales-orders
-understanding: "Find sales orders with total amounts exceeding €1,000"
+understanding: "Find sales orders with total amounts exceeding ${amount}"
 expectedData:
   summary:
     - OrderCount
@@ -19,8 +19,8 @@ defaultEntities:
   dateFrom: "2026-01-01"
   dateTo: "2026-12-31"
 sampleQueries:
-  - "Find sales orders with total amounts exceeding €1,000"
-  - "Sales orders with total amounts exceeding €1,000?"
+  - "Find sales orders with total amounts exceeding ${amount}"
+  - "Sales orders with total amounts exceeding ${amount}?"
 steps:
   - id: 1
     action: sales-list-sales-orders

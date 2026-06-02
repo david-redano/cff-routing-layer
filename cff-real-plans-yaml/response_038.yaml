@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Check all sales quotes from the last quarter to identify any gaps in the quote numbering sequence"
 capabilities:
   - sales-quotes
-understanding: "Check all sales quotes from the last quarter to identify any gaps in the quote numbering sequence"
+understanding: "Check all sales quotes from the ${period} to identify any gaps in the quote numbering sequence"
 expectedData:
   summary:
     - TotalQuotes
@@ -19,8 +19,8 @@ defaultEntities:
   dateFrom: "2026-01-01"
   dateTo: "2026-03-31"
 sampleQueries:
-  - "Check all sales quotes from the last quarter to identify any gaps in the quote numbering sequence"
-  - "Check all sales quotes from the last quarter to identify any gaps in the quote?"
+  - "Check all sales quotes from the ${period} to identify any gaps in the quote numbering sequence"
+  - "Check all sales quotes from the ${period} to identify any gaps in the quote?"
 steps:
   - id: 1
     action: sales-list-sales-quotes

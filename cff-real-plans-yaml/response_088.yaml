@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Check whether any sales quotes were created on February 10, 2026"
 capabilities:
   - sales-quotes
-understanding: "Check whether any sales quotes were created on February 10, 2026"
+understanding: "Check whether any sales quotes were created on ${date}"
 expectedData:
   summary:
     - QuoteExists
@@ -16,8 +16,8 @@ defaultEntities:
   dateFrom: "2026-02-10"
   dateTo: "2026-02-10"
 sampleQueries:
-  - "Check whether any sales quotes were created on February 10, 2026"
-  - "Check whether any sales quotes were created on February 10, 2026?"
+  - "Check whether any sales quotes were created on ${date}"
+  - "Check whether any sales quotes were created on ${date}?"
 steps:
   - id: 1
     action: sales-list-sales-quotes

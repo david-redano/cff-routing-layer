@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Show the total amount of sales invoices issued last month that have already been collected (paid)"
 capabilities:
   - sales-invoices
-understanding: "Show the total amount of sales invoices issued last month that have already been collected (paid)"
+understanding: "Show the total amount of sales invoices issued ${period} that have already been collected (paid)"
 expectedData:
   summary:
     - TotalCollected
@@ -16,8 +16,8 @@ defaultEntities:
   dateFrom: "2026-05-01"
   dateTo: "2026-05-31"
 sampleQueries:
-  - "Show the total amount of sales invoices issued last month that have already been collected (paid)"
-  - "Total amount of sales invoices issued last month that have already been?"
+  - "Show the total amount of sales invoices issued ${period} that have already been collected (paid)"
+  - "Total amount of sales invoices issued ${period} that have already been collected?"
 steps:
   - id: 1
     action: sales-list-sales-invoices

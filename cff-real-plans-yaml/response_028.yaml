@@ -5,7 +5,7 @@ displayName: Sales Agent
 description: "Find all sales orders created on 16 April 2026"
 capabilities:
   - sales-orders
-understanding: "Find all sales orders created on 16 April 2026"
+understanding: "Find all sales orders created on ${date}"
 expectedData:
   summary:
     - OrderCount
@@ -19,8 +19,8 @@ defaultEntities:
   dateFrom: "2026-04-16"
   dateTo: "2026-04-16"
 sampleQueries:
-  - "Find all sales orders created on 16 April 2026"
-  - "All sales orders created on 16 April 2026?"
+  - "Find all sales orders created on ${date}"
+  - "All sales orders created on ${date}?"
 steps:
   - id: 1
     action: sales-list-sales-orders

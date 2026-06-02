@@ -5,7 +5,7 @@ displayName: Analysis Agent
 description: "Identify which customers have ordered iPhones most frequently"
 capabilities:
   - analysis-aggregation
-understanding: "Identify which customers have ordered iPhones most frequently"
+understanding: "Identify which customers have ordered ${itemDescription} most frequently"
 expectedData:
   summary:
     - TotalCustomers
@@ -14,8 +14,8 @@ expectedData:
 defaultEntities:
   companyId: DEMO-001
 sampleQueries:
-  - "Identify which customers have ordered iPhones most frequently"
-  - "Customers have ordered iPhones most frequently?"
+  - "Identify which customers have ordered ${itemDescription} most frequently"
+  - "Customers have ordered ${itemDescription} most frequently?"
 steps:
   - id: 1
     action: analysis-aggregate-entity

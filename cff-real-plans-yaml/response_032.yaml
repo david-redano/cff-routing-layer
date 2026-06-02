@@ -6,7 +6,7 @@ description: "Calculate the average number of days from invoice issue date to pa
 capabilities:
   - sales-invoices
   - sales-get-invoice
-understanding: "Calculate the average number of days from invoice issue date to payment date across all customers over the last 3 months"
+understanding: "Calculate the average number of days from invoice issue date to payment date across all customers over the ${period}"
 expectedData:
   summary:
     - AverageDaysToCollect
@@ -19,7 +19,7 @@ defaultEntities:
   dateFrom: "2026-02-01"
   dateTo: "2026-05-01"
 sampleQueries:
-  - "Calculate the average number of days from invoice issue date to payment date across all customers over the last 3 months"
+  - "Calculate the average number of days from invoice issue date to payment date across all customers over the ${period}"
   - "Average number of days from invoice issue date to payment date across all?"
 steps:
   - id: 1

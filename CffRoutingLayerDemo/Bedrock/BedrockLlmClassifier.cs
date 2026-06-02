@@ -3,9 +3,6 @@ namespace CffRoutingLayerDemo.Bedrock;
 
 using System.Collections.Generic;
 using System.Text.Json;
-using Amazon;
-using Amazon.BedrockRuntime;
-using Amazon.BedrockRuntime.Model;
 using CffRoutingLayerDemo.Classification;
 using CffRoutingLayerDemo.Config;
 using CffRoutingLayerDemo.Core;
@@ -16,8 +13,7 @@ using CffRoutingLayerDemo.Core;
 /// </summary>
 public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
 {
-    private readonly AmazonBedrockRuntimeClient _client;
-    private readonly string _modelId;
+    private readonly BedrockLlmHelper _llm;
 
     private static readonly string SystemPrompt =
         $$"""
@@ -45,9 +41,7 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
 
     public BedrockLlmClassifier(AppConfig config)
     {
-        _modelId = config.BedrockLlmModelId;
-        _client  = new AmazonBedrockRuntimeClient(
-            RegionEndpoint.GetBySystemName(config.AwsRegion));
+        _llm = new BedrockLlmHelper(config);
     }
 
     public IntentResult Classify(string normalizedText)
@@ -57,29 +51,13 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
         string normalizedText,
         CancellationToken ct = default)
     {
-        var request = new ConverseRequest
-        {
-            ModelId = _modelId,
-            System  = [new SystemContentBlock { Text = SystemPrompt }],
-            Messages =
-            [
-                new Message
-                {
-                    Role    = ConversationRole.User,
-                    Content = [new ContentBlock { Text = $"Classify: \"{normalizedText}\"" }]
-                }
-            ],
-            InferenceConfig = new InferenceConfiguration
-            {
-                MaxTokens   = 100,
-                Temperature = 0f
-            }
-        };
-
         try
         {
-            var response = await _client.ConverseAsync(request, ct);
-            var json     = response.Output.Message.Content[0].Text.Trim();
+            var json = await _llm.ConverseAsync(
+                SystemPrompt,
+                $"Classify: \"{normalizedText}\"",
+                maxTokens: 100,
+                ct: ct);
             return ParseResponse(json, normalizedText);
         }
         catch
@@ -127,7 +105,7 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
         }
     }
 
-    public void Dispose() => _client.Dispose();
+    public void Dispose() => _llm.Dispose();
 
     /// <summary>
     /// LLM prompt is single-intent by design. Returns the result as a singleton list.
@@ -138,29 +116,13 @@ public sealed class BedrockLlmClassifier : IIntentClassifier, IDisposable
 
     public async Task<IReadOnlyList<IntentResult>> ClassifyAllAsync(string normalizedText, CancellationToken ct = default)
     {
-        var request = new ConverseRequest
-        {
-            ModelId = _modelId,
-            System  = [new SystemContentBlock { Text = SystemPrompt }],
-            Messages =
-            [
-                new Message
-                {
-                    Role    = ConversationRole.User,
-                    Content = [new ContentBlock { Text = $"Classify: \"{normalizedText}\"" }]
-                }
-            ],
-            InferenceConfig = new InferenceConfiguration
-            {
-                MaxTokens   = 200,
-                Temperature = 0f
-            }
-        };
-
         try
         {
-            var response = await _client.ConverseAsync(request, ct);
-            var json     = response.Output.Message.Content[0].Text.Trim();
+            var json = await _llm.ConverseAsync(
+                SystemPrompt,
+                $"Classify: \"{normalizedText}\"",
+                maxTokens: 200,
+                ct: ct);
             return ParseMultiResponse(json, normalizedText);
         }
         catch
