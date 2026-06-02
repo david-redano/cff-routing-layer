@@ -20,6 +20,7 @@
     <None Update="tests\*.yaml"      CopyToOutputDirectory="PreserveNewest" />
     <None Update="benchmarks\*.yaml" CopyToOutputDirectory="PreserveNewest" />
     <None Update=".env"              CopyToOutputDirectory="PreserveNewest" Condition="Exists('.env')" />
+    <None Update="appsettings.json"  CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -14,7 +14,7 @@ public static class ConsoleRenderer
         AnsiConsole.Write(new FigletText("CFF Routing Layer").Color(Color.Cyan1));
         AnsiConsole.Write(
             new Panel(
-                "[grey]7-Stage Intent Routing | Semantic Cache | LLM Rewriter | Conversation History[/]\n" +
+                "[grey]4-Layer Structural Plan Routing | LLM-Optional | Conversation History[/]\n" +
                 "[grey]Type [bold]help[/] for commands, [bold]demo[/] to run preset scenarios, [bold]exit[/] to quit.[/]")
             .Header("[cyan1]CFF Financial Assistant Demo[/]")
             .Border(BoxBorder.Rounded)
@@ -29,13 +29,12 @@ public static class ConsoleRenderer
             .Title("[cyan1]Available Commands[/]")
             .AddColumn("[bold]Command[/]")
             .AddColumn("[bold]Description[/]")
-            .AddRow("[yellow]demo[/]",     "Run 12 preset scenarios and show metrics")
+            .AddRow("[yellow]demo[/]",     "Run preset scenarios and show metrics")
             .AddRow("[yellow]history[/]",  "Show conversation history (current session)")
             .AddRow("[yellow]compact[/]",  "Manually trigger conversation compaction")
-            .AddRow("[yellow]cache[/]",    "Show semantic cache contents")
             .AddRow("[yellow]clear[/]",    "Clear conversation history")
             .AddRow("[yellow]config[/]",   "Show current configuration")
-            .AddRow("[yellow]stats[/]",    "Show session statistics (LLM calls, latency, cache hit rate)")
+            .AddRow("[yellow]stats[/]",    "Show session statistics")
             .AddRow("[yellow]help[/]",     "Show this help")
             .AddRow("[yellow]exit[/]",     "Quit the demo");
 
@@ -56,57 +55,22 @@ public static class ConsoleRenderer
         => AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(message)}");
 
     public static void PrintConfig(
-        bool useLlmRewriter,
-        bool useBedrockCache,
-        bool useBedrockClassifier,
+        bool useLlmQueryParser,
+        bool useLlmRanker,
+        bool useBedrockRag,
         string awsRegion,
-        string rewriterModel,
-        string llmModel,
-        double cacheThreshold)
+        string llmModel)
     {
         var table = new Table()
             .Border(TableBorder.Rounded)
             .Title("[cyan1]Active Configuration[/]")
             .AddColumn("[bold]Setting[/]")
             .AddColumn("[bold]Value[/]")
-            .AddRow("LLM Rewriter",       useLlmRewriter      ? "[green]enabled[/]" : "[grey]disabled (regex)[/]")
-            .AddRow("Bedrock Cache",       useBedrockCache     ? "[green]enabled[/]" : "[grey]disabled (local)[/]")
-            .AddRow("Bedrock Classifier",  useBedrockClassifier ? "[green]enabled[/]" : "[grey]disabled (rule-based)[/]")
+            .AddRow("LLM Query Parser",    useLlmQueryParser ? "[green]enabled[/]" : "[grey]disabled (rule-based)[/]")
+            .AddRow("LLM Ranker",          useLlmRanker      ? "[green]enabled[/]" : "[grey]disabled (feature-alignment)[/]")
+            .AddRow("Bedrock RAG",         useBedrockRag     ? "[green]enabled[/]" : "[grey]disabled[/]")
             .AddRow("AWS Region",          Markup.Escape(awsRegion))
-            .AddRow("Rewriter Model",      Markup.Escape(rewriterModel))
-            .AddRow("LLM Model",           Markup.Escape(llmModel))
-            .AddRow("Cache Threshold",     $"{cacheThreshold:P0}");
-
-        AnsiConsole.Write(table);
-    }
-
-    public static void PrintCacheEntries(IEnumerable<CffRoutingLayerDemo.Cache.CacheEntry> entries)
-    {
-        var list = entries.ToList();
-        if (list.Count == 0)
-        {
-            AnsiConsole.MarkupLine("[grey]Semantic cache is empty.[/]");
-            return;
-        }
-
-        var table = new Table()
-            .Border(TableBorder.Rounded)
-            .Title($"[cyan1]Semantic Cache ({list.Count} entries)[/]")
-            .AddColumn("[bold]#[/]")
-            .AddColumn("[bold]Normalized Key[/]")
-            .AddColumn("[bold]Intent[/]")
-            .AddColumn("[bold]Agent[/]");
-
-        foreach (var (e, i) in list.Select((e, i) => (e, i + 1)))
-        {
-            table.AddRow(
-                i.ToString(),
-                Markup.Escape(e.NormalizedText.Length > 55
-                    ? e.NormalizedText[..52] + "…"
-                    : e.NormalizedText),
-                Markup.Escape(e.Intent.Intent),
-                Markup.Escape(e.Intent.AgentId));
-        }
+            .AddRow("LLM Model",           Markup.Escape(llmModel));
 
         AnsiConsole.Write(table);
     }

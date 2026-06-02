@@ -1,6 +1,7 @@
 // Plans/PlanLoader.cs
 namespace CffRoutingLayerDemo.Plans;
 
+using CffRoutingLayerDemo.Index;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -13,11 +14,15 @@ public static class PlanLoader
             .IgnoreUnmatchedProperties()
             .Build();
 
+    private static readonly PlanFeatureExtractor Extractor = new();
+
     /// <summary>Load a single plan definition from a YAML file.</summary>
     public static PlanDefinition LoadFromFile(string filePath)
     {
         var yaml = File.ReadAllText(filePath);
-        return Deserializer.Deserialize<PlanDefinition>(yaml);
+        var plan = Deserializer.Deserialize<PlanDefinition>(yaml);
+        plan.Features = Extractor.Extract(plan);
+        return plan;
     }
 
     /// <summary>Load all .yaml plan files from a directory.</summary>

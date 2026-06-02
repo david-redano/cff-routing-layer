@@ -1,16 +1,17 @@
 ﻿// Program.cs — CFF Routing Layer Demo
 using DotNetEnv;
 using CffRoutingLayerDemo.Bedrock;
-using CffRoutingLayerDemo.Cache;
-using CffRoutingLayerDemo.Classification;
 using CffRoutingLayerDemo.CompanyData;
 using CffRoutingLayerDemo.Config;
 using CffRoutingLayerDemo.Conversation;
 using CffRoutingLayerDemo.Core;
 using CffRoutingLayerDemo.Demo;
-using CffRoutingLayerDemo.Normalization;
+using CffRoutingLayerDemo.Index;
+using CffRoutingLayerDemo.Matching;
 using CffRoutingLayerDemo.Plans;
-using CffRoutingLayerDemo.Registry;
+using CffRoutingLayerDemo.Ranking;
+using CffRoutingLayerDemo.Understanding;
+using CffRoutingLayerDemo.Validation;
 
 // ── Load .env file if present ────────────────────────────────────────────────
 if (File.Exists(".env"))
@@ -18,58 +19,51 @@ if (File.Exists(".env"))
 
 var config = AppConfig.FromEnvironment();
 
-// ── Bootstrap CanonicalPhrases from plan YAML files ───────────────────────────
-// Must run before constructing BedrockLlmClassifier or LlmIntentRewriter so
-// their system prompts contain the full, up-to-date intent list.
+// ── Load plans and build structural index ────────────────────────────────────
 var plansDir      = Path.Combine(AppContext.BaseDirectory, "plans");
 var benchmarkFile         = Path.Combine(AppContext.BaseDirectory, "benchmarks", "routing_benchmarks.yaml");
 var rewriterBenchmarkFile = Path.Combine(AppContext.BaseDirectory, "benchmarks", "rewriter_benchmarks.yaml");
-if (Directory.Exists(plansDir))
-    CanonicalPhrases.LoadFromPlans(plansDir);
 
-// Load demo scenarios from both benchmark YAMLs so the `demo` command
-// always reflects the latest suites without requiring a code change.
+var plans = Directory.Exists(plansDir)
+    ? PlanLoader.LoadFromDirectory(plansDir)
+    : Array.Empty<PlanDefinition>();
+
+var planIndex = new PlanIndex(plans);
+
+// Load demo scenarios from benchmark YAMLs
 DemoScenarios.LoadFromBenchmarks(benchmarkFile);
 DemoScenarios.LoadFromBenchmarks(rewriterBenchmarkFile);
 
 // ── Build infrastructure ──────────────────────────────────────────────────────
 
-ISemanticCache cache = config.UseBedrockCache
-    ? new BedrockSemanticCache(config)
-    : new InMemorySemanticCache();
+BedrockLlmHelper? bedrockHelper = config.UseLlmQueryParser || config.UseLlmRanker || config.UseBedrockRag
+    ? new BedrockLlmHelper(config)
+    : null;
 
-IIntentClassifier classifier = config.UseBedrockClassifier
-    ? new BedrockLlmClassifier(config)
-    : new RuleBasedClassifier();
+IQueryParser queryParser = (config.UseLlmQueryParser && bedrockHelper is not null)
+    ? new LlmQueryParser(bedrockHelper)
+    : new RuleBasedQueryParser();
 
-IIntentRewriter rewriter = config.UseLlmRewriter
-    ? new LlmIntentRewriter(config)
-    : new RegexIntentRewriter();
+IPlanRanker ranker = (config.UseLlmRanker && bedrockHelper is not null)
+    ? new LlmPlanJudge(bedrockHelper)
+    : new FeatureAlignmentRanker();
 
-var registry      = AgentRegistry.LoadFromPlans(plansDir);
+IPlanValidator validator = new CompositeValidator();
+
 var dataStore     = new CompanyDataStore();
-RagSummarizer? ragSummarizer = config.UseBedrockRag ? new RagSummarizer(config) : null;
+RagSummarizer? ragSummarizer = (config.UseBedrockRag && bedrockHelper is not null)
+    ? new RagSummarizer(config)
+    : null;
 var executor      = new PlanExecutor(dataStore, ragSummarizer);
 var stats         = new SessionStats();
-IDisambiguator? disambiguator = config.UseBedrockDisambiguator
-    ? new BedrockDisambiguator(config)
-    : null;
-var engine        = new RoutingEngine(cache, classifier, registry, executor, rewriter, stats, disambiguator);
 
-// Streaming fallback (used for Unknown intents)
+var pipeline = new PlanRoutingPipeline(queryParser, planIndex, ranker, validator, executor);
+
+// Streaming fallback (used for unknown intents)
 var streaming = new BedrockStreamingConversation(config);
 
 // Single conversation history for the entire session
 var history = new ConversationHistory();
-
-// ── Cache pre-warming ─────────────────────────────────────────────────────────
-// Each sample query is normalised via the rewriter before being stored so the
-// cache key matches what the router produces at query time (post-rewrite text).
-if (Directory.Exists(plansDir))
-{
-    var warmer = new CacheWarmer(cache, rewriter, classifier, registry, executor);
-    await warmer.WarmAsync(plansDir);
-}
 
 // ── Banner ────────────────────────────────────────────────────────────────────
 ConsoleRenderer.PrintBanner();
@@ -114,19 +108,13 @@ while (!cts.IsCancellationRequested)
             Console.ResetColor();
             continue;
 
-        case "cache":
-            ConsoleRenderer.PrintCacheEntries(cache.Entries);
-            continue;
-
         case "config":
             ConsoleRenderer.PrintConfig(
-                config.UseLlmRewriter,
-                config.UseBedrockCache,
-                config.UseBedrockClassifier,
+                config.UseLlmQueryParser,
+                config.UseLlmRanker,
+                config.UseBedrockRag,
                 config.AwsRegion,
-                config.BedrockRewriterModelId,
-                config.BedrockLlmModelId,
-                config.CacheSimilarityThreshold);
+                config.BedrockLlmModelId);
             continue;
 
         case "stats":
@@ -134,10 +122,10 @@ while (!cts.IsCancellationRequested)
             continue;
 
         case "compact":
-            if (!config.UseBedrockCache && !config.UseLlmRewriter)
+            if (!config.UseLlmQueryParser)
             {
                 Console.ForegroundColor = ConsoleColor.DarkYellow;
-                Console.WriteLine("  Compaction requires Bedrock (USE_LLM_REWRITER=true or USE_BEDROCK_CACHE=true).");
+                Console.WriteLine("  Compaction requires Bedrock (USE_LLM_QUERY_PARSER=true).");
                 Console.ResetColor();
             }
             else if (history.Turns.Count < 2)
@@ -154,7 +142,7 @@ while (!cts.IsCancellationRequested)
             continue;
 
         case "demo":
-            await RunDemoScenariosAsync(engine, streaming, history, config, cts.Token);
+            await RunDemoScenariosAsync(pipeline, streaming, history, config, stats, cts.Token);
             continue;
     }
 
@@ -164,31 +152,26 @@ while (!cts.IsCancellationRequested)
     var started = DateTime.UtcNow;
     try
     {
-        var context = new RoutingContext(
-            RequestId:   Guid.NewGuid().ToString(),
-            UserMessage: trimmed,
-            CompanyId:   "DEMO-001",
-            Timestamp:   DateTime.UtcNow);
-
-        var (result, fromCache) = await engine.HandleAsync(context, history, cts.Token);
-
+        var convCtx = BuildConversationContext(history);
+        var (result, decision) = await pipeline.HandleAsync(trimmed, "DEMO-001", convCtx, cts.Token);
         var elapsed = DateTime.UtcNow - started;
-        var intentForStats = history.Turns.LastOrDefault()?.Intent ?? "";
-        stats.RecordQuery(fromCache, (long)elapsed.TotalMilliseconds, intentForStats);
-        ConsoleRenderer.PrintMetrics(elapsed, cached: fromCache);
 
-        // Check if result signals unknown intent → streaming fallback
-        if (result.StartsWith("I could not determine"))
+        var intent  = decision.SelectedPlan?.Plan.Intent ?? decision.Status.ToString();
+        var agentId = decision.SelectedPlan?.Plan.AgentId ?? "";
+        stats.RecordQuery(fromCache: false, (long)elapsed.TotalMilliseconds, intent);
+        ConsoleRenderer.PrintMetrics(elapsed, cached: false);
+
+        if (decision.Status == RoutingStatus.Rejected || decision.Status == RoutingStatus.NoPlanFound)
         {
+            // Streaming fallback for unmatched queries
             Console.ForegroundColor = ConsoleColor.DarkYellow;
-            Console.WriteLine("  [Unknown intent] Routing to streaming fallback...");
+            Console.WriteLine("  [Fallback] Routing to streaming conversation...");
             Console.ResetColor();
 
             var streamResult = await streaming.ChatAsync(trimmed, history, cts.Token);
             stats.RecordStreamingFallback();
             stats.RecordLlmStreamingCall();
 
-            // Record streaming turn in shared history
             history.AddTurn(new ConversationTurn(
                 Timestamp:         DateTime.UtcNow,
                 UserMessage:       trimmed,
@@ -199,9 +182,20 @@ while (!cts.IsCancellationRequested)
                 AssistantResponse: streamResult,
                 WasStreamed:       true));
         }
-        else if (!result.StartsWith("I can only assist"))
+        else if (decision.Status == RoutingStatus.Success)
         {
-            ConsoleRenderer.PrintResult(result, fromCache: fromCache);
+            ConsoleRenderer.PrintResult(result, fromCache: false);
+            history.AddTurn(new ConversationTurn(
+                Timestamp:         DateTime.UtcNow,
+                UserMessage:       trimmed,
+                NormalizedMessage: trimmed,
+                ExtractedEntities: decision.SelectedPlan?.SlotBindings
+                    .ToDictionary(b => b.SlotName, b => b.Value)
+                    ?? new Dictionary<string, string>(),
+                Intent:            intent,
+                AgentId:           agentId,
+                AssistantResponse: result,
+                WasStreamed:       false));
         }
         else
         {
@@ -220,7 +214,7 @@ while (!cts.IsCancellationRequested)
     }
 
     // ── Auto-compact if threshold exceeded ────────────────────────────────────
-    if (history.NeedsCompaction && config.UseLlmRewriter)
+    if (history.NeedsCompaction && config.UseLlmQueryParser)
     {
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine($"  [History] Threshold reached ({history.Turns.Count} turns). Auto-compacting...");
@@ -235,13 +229,40 @@ while (!cts.IsCancellationRequested)
 
 Done:
 Console.WriteLine("\nGoodbye.");
+bedrockHelper?.Dispose();
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+static ConversationContext? BuildConversationContext(ConversationHistory history)
+{
+    if (history.Turns.Count == 0) return null;
+    var recent = history.Turns.TakeLast(4).ToList();
+    var lastDomain = recent.LastOrDefault(t => !string.IsNullOrEmpty(t.Intent))?.Intent;
+    var sessionSlots = recent
+        .SelectMany(t => t.ExtractedEntities)
+        .GroupBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.Last().Value, StringComparer.OrdinalIgnoreCase);
+
+    return new ConversationContext
+    {
+        RecentTurns = recent.Select(t => new PreviousTurn
+        {
+            Query          = t.UserMessage,
+            ResolvedAction = t.Intent,
+            Domain         = t.AgentId
+        }).ToList(),
+        ActiveDomain = lastDomain,
+        SessionSlots = sessionSlots
+    };
+}
 
 // ── Demo scenarios runner ─────────────────────────────────────────────────────
 static async Task RunDemoScenariosAsync(
-    RoutingEngine engine,
+    PlanRoutingPipeline pipeline,
     BedrockStreamingConversation streaming,
     ConversationHistory history,
     AppConfig config,
+    SessionStats stats,
     CancellationToken ct)
 {
     Console.ForegroundColor = ConsoleColor.Cyan;
@@ -261,8 +282,6 @@ static async Task RunDemoScenariosAsync(
         Console.WriteLine($"  {scenario.Description}");
         Console.ResetColor();
 
-        // Each scenario runs with a fresh conversation history so that
-        // guardrails are not suppressed by turns accumulated in prior scenarios.
         var scenarioHistory = new ConversationHistory();
 
         foreach (var turn in scenario.Turns)
@@ -273,19 +292,14 @@ static async Task RunDemoScenariosAsync(
 
             ConsoleRenderer.PrintStageHeader(turn.UserMessage);
 
-            var ctx = new RoutingContext(
-                RequestId:   Guid.NewGuid().ToString(),
-                UserMessage: turn.UserMessage,
-                CompanyId:   "DEMO-001",
-                Timestamp:   DateTime.UtcNow);
-
             var start = DateTime.UtcNow;
             try
             {
-                var (result, fromCache) = await engine.HandleAsync(ctx, scenarioHistory, ct);
+                var convCtx = BuildConversationContext(scenarioHistory);
+                var (result, decision) = await pipeline.HandleAsync(turn.UserMessage, "DEMO-001", convCtx, ct);
                 var elapsed = DateTime.UtcNow - start;
 
-                if (result.StartsWith("I could not determine"))
+                if (decision.Status == RoutingStatus.Rejected || decision.Status == RoutingStatus.NoPlanFound)
                 {
                     var streamResult = await streaming.ChatAsync(turn.UserMessage, scenarioHistory, ct);
                     scenarioHistory.AddTurn(new ConversationTurn(
@@ -298,8 +312,12 @@ static async Task RunDemoScenariosAsync(
                         AssistantResponse: streamResult,
                         WasStreamed:       true));
                 }
+                else if (decision.Status == RoutingStatus.Success)
+                {
+                    ConsoleRenderer.PrintResult(result, fromCache: false);
+                }
 
-                ConsoleRenderer.PrintMetrics(elapsed, cached: fromCache);
+                ConsoleRenderer.PrintMetrics(elapsed, cached: false);
                 passed++;
             }
             catch (Exception ex)
@@ -320,7 +338,4 @@ static async Task RunDemoScenariosAsync(
     Console.WriteLine($"  History: {history.TotalTurns} turns in main session");
     Console.WriteLine("═══════════════════════════════════════════════════════════════");
     Console.ResetColor();
-
-    ConsoleRenderer.PrintCacheEntries(engine.Cache.Entries);
 }
-

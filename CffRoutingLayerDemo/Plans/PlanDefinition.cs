@@ -1,6 +1,8 @@
 // Plans/PlanDefinition.cs
 namespace CffRoutingLayerDemo.Plans;
 
+using CffRoutingLayerDemo.Queries;
+
 /// <summary>
 /// YAML-deserialisable plan definition.  Contains everything needed to
 /// register an agent and build its execution plan at runtime — no C# code
@@ -39,6 +41,26 @@ public sealed class PlanDefinition
 
     /// <summary>Ordered execution steps declared in YAML.</summary>
     public List<YamlPlanStep> Steps { get; set; } = [];
+
+    /// <summary>
+    /// Structural feature vector computed at load time by <see cref="Index.PlanFeatureExtractor"/>.
+    /// Not populated from YAML — set after deserialization.
+    /// </summary>
+    [YamlDotNet.Serialization.YamlIgnore]
+    public PlanFeatureVector? Features { get; set; }
+
+    /// <summary>All required input slot names derived from step parameters and default entities.</summary>
+    [YamlDotNet.Serialization.YamlIgnore]
+    public IReadOnlyList<string> RequiredInputSlots =>
+        Steps
+            .SelectMany(s => s.Parameters.Keys)
+            .Concat(DefaultEntities.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    /// <summary>Output field names inferred from ExpectedData.</summary>
+    [YamlDotNet.Serialization.YamlIgnore]
+    public IReadOnlyList<string> ProducedOutputFields => ExpectedData.Summary;
 }
 
 /// <summary>
