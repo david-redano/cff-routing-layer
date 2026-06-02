@@ -1,0 +1,77 @@
+planId: real-039
+intent: IdentifyCustomerClosingRateConverted
+agentId: AnalysisAgent
+displayName: Analysis Agent
+description: "Identify which customer has the highest closing rate (converted quotes divided by total quotes)"
+capabilities:
+  - analysis-aggregation
+understanding: "Identify which customer has the highest closing rate (converted quotes divided by total quotes)"
+expectedData:
+  summary:
+    - TopCustomerName
+    - TopCustomerId
+    - TopClosingRate
+    - TieCount
+    - TotalCustomersAnalyzed
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2025-05-28"
+  dateTo: "2026-05-28"
+sampleQueries:
+  - "Identify which customer has the highest closing rate (converted quotes divided by total quotes)"
+  - "Customer has the highest closing rate (converted quotes divided by total quotes)?"
+steps:
+  - id: 1
+    action: analysis-aggregate-entity
+    stepType: Tool
+    toolName: analysis_aggregate_entity
+    toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
+    stepReason: "Count closed quotes by customer"
+    dependsOn: []
+    input:
+      - key: entity
+        value: "sales_quotes"
+      - key: metric
+        value: "count"
+      - key: aggregation
+        value: "count"
+      - key: date_field
+        value: "date"
+      - key: date_range_from
+        value: "2025-05-28"
+      - key: date_range_to
+        value: "2026-05-28"
+      - key: group_by
+        value: "[\"customer_id\"]"
+      - key: filter
+        value: "status eq 'Closed'"
+    nextStep: 2
+  - id: 2
+    action: analysis-aggregate-entity
+    stepType: Tool
+    toolName: analysis_aggregate_entity
+    toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
+    stepReason: "Count all quotes by customer"
+    dependsOn: [1]
+    input:
+      - key: entity
+        value: "sales_quotes"
+      - key: metric
+        value: "count"
+      - key: aggregation
+        value: "count"
+      - key: date_field
+        value: "date"
+      - key: date_range_from
+        value: "2025-05-28"
+      - key: date_range_to
+        value: "2026-05-28"
+      - key: group_by
+        value: "[\"customer_id\"]"
+    nextStep: 3
+  - id: 3
+    action: compute-calculate-closing-rate-and-identify-top-customer
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Calculate closing rate and identify top customer"
+    dependsOn: [2]

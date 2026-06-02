@@ -1,0 +1,45 @@
+<Reasoning>
+Request: {Cat: Comparison, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate the percentage breakdown of short-term debt versus long-term debt"
+Approach: "Fetch the Balance Sheet via accounting_get_balance_sheet for the current financial year end date, extract current_liabilities (short-term) and non_current_liabilities (long-term) from the report, calculate totals and percentages in a Code step, and return as Text Summary with the debt composition."
+Tools:
+  Step1: {Name: accounting_get_balance_sheet, Id: "66edba23-cd30-c840-7cfb-057f0bda1aba"}
+ToolAccess: {Step1: ".report"}
+OutputFields:
+  Step1: [report.liabilities.current.total_current_liabilities, report.liabilities.non_current.total_non_current_liabilities, report_metadata.currency_code]
+RequiredParams:
+  Step1: {end_date: "2026-04-01"}
+Pipeline: [fetch balance sheet, extract liability sections, calculate percentages]
+Constraints: [retrieve current FY end date (tool→end_date), extract current and non-current liabilities (code), calculate percentages (code), handle zero total debt→zero-state (defensive), validate numeric values (defensive)]
+Layout: {Type: Text, Reason: "Single comparison metric with percentage breakdown"}
+ExpectedData:
+  Summary: [ShortTermDebtPercentage, LongTermDebtPercentage, ShortTermDebtAmount, LongTermDebtAmount, TotalDebt, Currency]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "66edba23-cd30-c840-7cfb-057f0bda1aba",
+  "ToolName": "accounting_get_balance_sheet",
+  "StepReason": "Fetch balance sheet for debt analysis",
+  "Input": [
+    {"Key": "end_date", "Value": "2026-04-01"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate short-term vs long-term debt percentages",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var rep = r.report;\n  if (!rep || typeof rep !== 'object') {\n    throw new Error('Step1 report is missing');\n  }\n  var liab = rep.liabilities;\n  if (!liab || typeof liab !== 'object') {\n    throw new Error('Step1 liabilities section is missing');\n  }\n  var cur = r.report_metadata && r.report_metadata.currency_code ? r.report_metadata.currency_code : null;\n  var st = (liab.current && typeof liab.current.total_current_liabilities === 'number') ? liab.current.total_current_liabilities : 0;\n  var lt = (liab.non_current && typeof liab.non_current.total_non_current_liabilities === 'number') ? liab.non_current.total_non_current_liabilities : 0;\n  var tot = st + lt;\n  if (tot === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        ShortTermDebtPercentage: 0,\n        LongTermDebtPercentage: 0,\n        ShortTermDebtAmount: 0,\n        LongTermDebtAmount: 0,\n        TotalDebt: 0,\n        Currency: cur\n      },\n      Files: []\n    };\n  }\n  var stp = (st / tot) * 100;\n  var ltp = (lt / tot) * 100;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      ShortTermDebtPercentage: Math.round(stp * 100) / 100,\n      LongTermDebtPercentage: Math.round(ltp * 100) / 100,\n      ShortTermDebtAmount: st,\n      LongTermDebtAmount: lt,\n      TotalDebt: tot,\n      Currency: cur\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "buildOutput",
+  "NextStep": null
+}
+</Step>
+</Response>

@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate the total monetary amount across all sales quotes"
+Approach: "Fetch all quotes via sales_list_sales_quotes with default 1-year rolling-window date range (TodaysDate minus 1 year to TodaysDate per Specialized Rule), sum total_amount in Code step, return Text summary with period fields."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2025-06-01", date_to: "2026-06-01", page_size: "200"}
+Pipeline: [fetch all quotes with 1-year window, sum amounts, build output]
+Constraints: [retrieve all quotes (tool→default), date range 2025-06-01 to 2026-06-01 (tool→date_from, tool→date_to), page_size 200 (tool→page_size), currency consistency (defensive), empty quotes→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single aggregated monetary value with period context"}
+ExpectedData:
+  Summary: [TotalQuotes, TotalAmount, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-06-01"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Sum quote amounts and build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        TotalQuotes: 0,\n        TotalAmount: 0,\n        Currency: null,\n        PeriodFrom: '2025-06-01',\n        PeriodTo: '2026-06-01',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = q[0].currency.code;\n  var tot = 0;\n  for (var i = 0; i < q.length; i++) {\n    if (q[i].currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    tot += q[i].total_amount;\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      TotalQuotes: q.length,\n      TotalAmount: tot,\n      Currency: cur,\n      PeriodFrom: '2025-06-01',\n      PeriodTo: '2026-06-01',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

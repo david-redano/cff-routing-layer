@@ -1,0 +1,103 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Retrieve details for sales order number 0003 for customer TechCorp Solutions with order date January 15, 2024"
+Approach: "Search for customer TechCorp Solutions via sales_list_customers to obtain the customer ID, validate single match in Code step, then fetch sales orders for that customer via sales_list_sales_orders filtered to the date range around January 15, 2024, identify order 0003 in Code step, and retrieve full details via sales_get_sales_order."
+Tools:
+  Step1: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+  Step3: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+  Step5: {Name: sales_get_sales_order, Id: "bb53c0b2-0434-0479-4f19-6756b0002ab3"}
+ToolAccess: {Step1: ".results", Step3: ".results", Step5: "."}
+OutputFields:
+  Step1: [results.id, results.name]
+  Step3: [results.id, results.reference, results.date, results.customer.id, results.customer.name, results.total_amount, results.currency.code]
+  Step5: [id, reference, date, customer.id, customer.name, status, total_amount, net_amount, currency.code, items]
+RequiredParams:
+  Step1: {query: "TechCorp Solutions"}
+  Step3: {customer_id: "$.Step2.CustomerId", date_from: "2024-01-01", date_to: "2024-01-31"}
+  Step5: {sales_order_id: "$.Step4.OrderId"}
+Pipeline: [search customer by name, validate match, fetch orders for customer in January 2024, find order 0003, retrieve full details]
+Constraints: [validate single customer match (code), filter by customer_id (tool→customer_id), date range 2024-01-01 to 2024-01-31 (tool→date_from, tool→date_to), locate order reference 0003 (code), order not found→AbortPlan (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Table, Reason: "Single order with multiple line items and attributes"}
+ExpectedData:
+  Summary: [OrderReference, CustomerName, OrderDate, Status, TotalAmount, Currency, LineItemCount]
+  Tables:
+    - [Description, Quantity, UnitPrice, NetAmount, TotalAmount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Search for customer TechCorp Solutions",
+  "Input": [
+    {"Key": "query", "Value": "TechCorp Solutions"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Validate single customer match",
+  "FunctionName": "validateCustomer",
+  "Function": "function validateCustomer() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var cs = r.results;\n  if (!Array.isArray(cs)) {\n    throw new Error('Step1 results is not an array');\n  }\n  if (cs.length === 0) {\n    AbortPlan('No customer found matching TechCorp Solutions');\n  }\n  if (cs.length > 1) {\n    AbortPlan('Multiple customers found matching TechCorp Solutions. Please specify further.');\n  }\n  return { CustomerId: cs[0].id, CustomerName: cs[0].name };\n}",
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch sales orders for customer in January 2024",
+  "Input": [
+    {"Key": "customer_id", "Value": "$.Step2.CustomerId"},
+    {"Key": "date_from", "Value": "2024-01-01"},
+    {"Key": "date_to", "Value": "2024-01-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 4
+}
+</Step>
+<Step>
+{
+  "Id": 4,
+  "Type": "Code",
+  "StepReason": "Locate order 0003 and extract ID",
+  "FunctionName": "findOrder",
+  "Function": "function findOrder() {\n  var c = GetTaskOutput('Step2');\n  var r = GetTaskOutput('Step3');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step3 returned invalid output');\n  }\n  var os = r.results;\n  if (!Array.isArray(os)) {\n    throw new Error('Step3 results is not an array');\n  }\n  if (os.length === 0) {\n    AbortPlan('No sales orders found for customer TechCorp Solutions in January 2024');\n  }\n  var found = null;\n  for (var i = 0; i < os.length; i++) {\n    if (os[i].reference === '0003') {\n      found = os[i];\n      break;\n    }\n  }\n  if (!found) {\n    AbortPlan('Sales order 0003 not found for customer TechCorp Solutions in January 2024');\n  }\n  return { OrderId: found.id, OrderReference: found.reference };\n}",
+  "NextStep": 5
+}
+</Step>
+<Step>
+{
+  "Id": 5,
+  "Type": "Tool",
+  "ToolId": "bb53c0b2-0434-0479-4f19-6756b0002ab3",
+  "ToolName": "sales_get_sales_order",
+  "StepReason": "Retrieve full sales order details",
+  "Input": [
+    {"Key": "sales_order_id", "Value": "$.Step4.OrderId"}
+  ],
+  "NextStep": 6
+}
+</Step>
+<Step>
+{
+  "Id": 6,
+  "Type": "Code",
+  "StepReason": "Build order details output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var o = GetTaskOutput('Step5');\n  if (!o || typeof o !== 'object') {\n    throw new Error('Step5 returned invalid output');\n  }\n  var its = o.items;\n  if (!Array.isArray(its)) {\n    its = [];\n  }\n  var cur = o.currency.code;\n  var td = [];\n  for (var i = 0; i < its.length; i++) {\n    var it = its[i];\n    td.push({\n      Description: it.description,\n      Quantity: it.units,\n      UnitPrice: it.unit_price,\n      NetAmount: it.net_amount,\n      TotalAmount: it.total_amount\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Sales Order 0003 - Line Items',\n      Columns: [\n        {Header: 'Description', Type: 'string', Data: 'Description'},\n        {Header: 'Quantity', Type: 'number', Data: 'Quantity'},\n        {Header: 'Unit Price', Type: 'currency', Data: 'UnitPrice', Currency: cur},\n        {Header: 'Net Amount', Type: 'currency', Data: 'NetAmount', Currency: cur},\n        {Header: 'Total Amount', Type: 'currency', Data: 'TotalAmount', Currency: cur}\n      ],\n      Data: td\n    }],\n    Headings: [{Text: 'Sales Order 0003', Level: 1}],\n    Summary: {\n      OrderReference: o.reference,\n      CustomerName: o.customer.name,\n      OrderDate: o.date,\n      Status: o.status,\n      TotalAmount: o.total_amount,\n      Currency: cur,\n      LineItemCount: its.length\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

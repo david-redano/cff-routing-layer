@@ -1,0 +1,49 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Find the most recent sales quote by issue date"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes with default financial-year date range, sorted by date descending, then extract the first (most recent) record in a Code step; return as Text summary with quote details."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.date, results.customer.name, results.total_amount, results.currency.code, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", order_by_field: "date", order_by_direction: "desc", page_size: "200"}
+Pipeline: [fetch quotes sorted by date descending, extract most recent, build output]
+Constraints: [sort by date descending (tool→order_by_field, tool→order_by_direction), retrieve all quotes (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), zero quotes→zero-state (defensive), single record extraction (code)]
+Layout: {Type: Text, Reason: "Single quote record with key details"}
+ExpectedData:
+  Summary: [QuoteReference, CustomerName, QuoteDate, TotalAmount, Currency, Status, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch quotes sorted by date descending",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "order_by_field", "Value": "date"},
+    {"Key": "order_by_direction", "Value": "desc"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Extract most recent quote",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        QuoteReference: null,\n        CustomerName: null,\n        QuoteDate: null,\n        TotalAmount: 0,\n        Currency: null,\n        Status: null,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var m = q[0];\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      QuoteReference: m.reference,\n      CustomerName: m.customer.name,\n      QuoteDate: m.date,\n      TotalAmount: m.total_amount,\n      Currency: m.currency.code,\n      Status: m.status,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

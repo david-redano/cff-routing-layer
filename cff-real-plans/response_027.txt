@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate what percentage of total sales invoices were paid after their due date"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices with broadest date range (current FY), then in Code step identify paid invoices where paid_date > due_date, calculate the ratio (late-paid count ÷ total paid invoices), and return as Text Summary with the percentage metric."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.status, results.due_date, results.paid_date]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31"}
+Pipeline: [fetch all invoices, identify paid invoices with paid_date, filter late payments, calculate percentage]
+Constraints: [retrieve all invoices (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), late payment = paid_date > due_date (code), zero paid invoices→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Text, Reason: "Single calculated percentage metric"}
+ExpectedData:
+  Summary: [LatePaymentPercentage, LatePaymentCount, TotalPaidInvoices, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all sales invoices",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate late payment percentage",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        LatePaymentPercentage: 0,\n        LatePaymentCount: 0,\n        TotalPaidInvoices: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var pd = 0;\n  var tp = 0;\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    if (v.status === 'paid' || v.status === 'Collected') {\n      tp += 1;\n      if (v.paid_date && v.due_date && v.paid_date > v.due_date) {\n        pd += 1;\n      }\n    }\n  }\n  var pct = tp > 0 ? (pd / tp) * 100 : 0;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      LatePaymentPercentage: Math.round(pct * 100) / 100,\n      LatePaymentCount: pd,\n      TotalPaidInvoices: tp,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

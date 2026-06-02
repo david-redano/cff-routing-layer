@@ -1,0 +1,63 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Count how many customers have never received a sales quote"
+Approach: "Fetch all customers via sales_list_customers, fetch all quotes via sales_list_sales_quotes with broadest date range (current FY default), extract unique customer IDs from quotes in a Code step, identify customers not in that set, return count as Text Summary."
+Tools:
+  Step1: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+  Step2: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.id, results.name]
+  Step2: [results.customer.id]
+RequiredParams:
+  Step1: {}
+  Step2: {date_from: "2026-01-01", date_to: "2026-12-31"}
+Pipeline: [fetch all customers, fetch all quotes, identify customers without quotes, count]
+Constraints: [retrieve all customers (tool→default), retrieve all quotes in FY (tool→date_from, tool→date_to), page_size 200 for both (tool→page_size), identify customers never quoted (code), zero customers→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single count metric"}
+ExpectedData:
+  Summary: [TotalCustomers, CustomersNeverQuoted, PercentageNeverQuoted]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Fetch all customers",
+  "Input": [
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Identify customers never quoted",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var cr = GetTaskOutput('Step1');\n  var qr = GetTaskOutput('Step2');\n  if (!cr || typeof cr !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!qr || typeof qr !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var cs = Array.isArray(cr.results) ? cr.results : [];\n  var qs = Array.isArray(qr.results) ? qr.results : [];\n  if (cs.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [],\n      Summary: { TotalCustomers: 0, CustomersNeverQuoted: 0, PercentageNeverQuoted: 0 },\n      Files: []\n    };\n  }\n  var qc = {};\n  for (var i = 0; i < qs.length; i++) {\n    var cid = qs[i].customer.id;\n    if (cid) { qc[cid] = true; }\n  }\n  var nq = 0;\n  for (var j = 0; j < cs.length; j++) {\n    if (!qc[cs[j].id]) { nq += 1; }\n  }\n  var pct = cs.length > 0 ? Math.round((nq / cs.length) * 100) : 0;\n  return {\n    BarCharts: [], LineCharts: [], Tables: [], Headings: [],\n    Summary: {\n      TotalCustomers: cs.length,\n      CustomersNeverQuoted: nq,\n      PercentageNeverQuoted: pct\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

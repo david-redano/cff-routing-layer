@@ -1,0 +1,51 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customers have placed the most orders and rank them"
+Approach: "Fetch all sales orders via sales_list_sales_orders with broadest date range (current financial year), group by customer in Code step, count orders per customer, sort descending, cap at 12 for chart display; render as BarChart+Table for visual ranking with navigable detail."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.customer.id, results.customer.name, results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all sales orders, group by customer, count and sum per customer, sort descending, cap chart at 12]
+Constraints: [retrieve all customers (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), sort by order count descending (code), max 12 bars (code), include CustomerId for links (code), empty orders→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity ranking; chart for visual comparison, table for navigable detail"}
+ExpectedData:
+  Summary: [TotalCustomers, ChartedCustomers, TotalOrders, PeriodFrom, PeriodTo, PeriodLabel]
+  BarCharts:
+    - [CustomerName (X) vs OrderCount (Y), top 12]
+  Tables:
+    - [CustomerName (linked→CustomerId), OrderCount, TotalOrderValue, Currency]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Group by customer, count orders, build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var oo = Array.isArray(r.results) ? r.results : [];\n  if (oo.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Customers with Most Orders', Level: 1 }],\n      Summary: {\n        TotalCustomers: 0,\n        ChartedCustomers: 0,\n        TotalOrders: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var g = {};\n  for (var i = 0; i < oo.length; i++) {\n    var v = oo[i];\n    var x = v.customer.id;\n    var cn = v.customer.name;\n    if (!g[x]) {\n      g[x] = {\n        CustomerId: x,\n        CustomerName: cn,\n        OrderCount: 0,\n        TotalOrderValue: 0,\n        Currency: v.currency.code\n      };\n    }\n    g[x].OrderCount += 1;\n    g[x].TotalOrderValue += v.total_amount;\n  }\n  var rw = [];\n  var ks = Object.keys(g);\n  for (var k = 0; k < ks.length; k++) {\n    rw.push(g[ks[k]]);\n  }\n  rw.sort(function(a, b) { return b.OrderCount - a.OrderCount; });\n  if (rw.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Customers with Most Orders', Level: 1 }],\n      Summary: {\n        TotalCustomers: 0,\n        ChartedCustomers: 0,\n        TotalOrders: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = rw[0].Currency;\n  var cd = [];\n  var cl = Math.min(rw.length, 12);\n  for (var c = 0; c < cl; c++) {\n    cd.push({\n      CustomerName: rw[c].CustomerName,\n      OrderCount: rw[c].OrderCount\n    });\n  }\n  var td = [];\n  for (var m = 0; m < rw.length; m++) {\n    td.push({\n      CustomerId: rw[m].CustomerId,\n      CustomerName: rw[m].CustomerName,\n      OrderCount: rw[m].OrderCount,\n      TotalOrderValue: rw[m].TotalOrderValue,\n      Currency: cur\n    });\n  }\n  return {\n    BarCharts: [{\n      Title: 'Customers with Most Orders',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'OrderCount',\n        YLabel: 'Number of Orders',\n        YFormat: { Type: 'number' }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Customer Order Summary',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Order Count', Type: 'number', Data: 'OrderCount' },\n        { Header: 'Total Order Value', Type: 'currency', Data: 'TotalOrderValue', Currency: cur }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Customers with Most Orders', Level: 1 }],\n    Summary: {\n      TotalCustomers: rw.length,\n      ChartedCustomers: cl,\n      TotalOrders: oo.length,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

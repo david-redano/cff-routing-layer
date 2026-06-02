@@ -1,0 +1,55 @@
+<Reasoning>
+Request: {Cat: Comparison, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customer has the highest number of quotes and which has the lowest number of quotes"
+Approach: "Fetch all sales quotes via analysis_aggregate_entity grouped by customer_id to count quotes per customer, sort descending and ascending to identify top and bottom, return as BarChart+Table showing the comparison with supporting detail."
+Tools:
+  Step1: {Name: analysis_aggregate_entity, Id: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"}
+ToolAccess: {Step1: ".aggregation_result"}
+OutputFields:
+  Step1: [aggregation_result.group.customer_id.key, aggregation_result.group.customer_id.label, aggregation_result.count, aggregation_result.metric_value]
+RequiredParams:
+  Step1: {entity: "sales_quotes", metric: "count", aggregation: "count", date_field: "date", group_by: "[\"customer_id\"]", order_by_field: "metric_value", order_by_direction: "desc", limit: "200"}
+Pipeline: [aggregate quotes by customer, identify max and min, build comparison output]
+Constraints: [entity sales_quotes (tool→entity), metric count (tool→metric), aggregation count (tool→aggregation), group by customer_id (tool→group_by), sort descending by count (tool→order_by_field, tool→order_by_direction), retrieve all customers (tool→default), zero quotes→zero-state (defensive), validate aggregation result structure (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity comparison (customers) with quote counts; chart shows ranking, table provides detail"}
+ExpectedData:
+  Summary: [TopCustomer, TopCustomerQuoteCount, BottomCustomer, BottomCustomerQuoteCount, TotalCustomers, TotalQuotes]
+  BarCharts:
+    - [CustomerName (X) vs QuoteCount (Y), all customers sorted desc]
+  Tables:
+    - [CustomerName (linked→CustomerId), QuoteCount, Rank]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a",
+  "ToolName": "analysis_aggregate_entity",
+  "StepReason": "Aggregate quote count by customer",
+  "Input": [
+    {"Key": "entity", "Value": "sales_quotes"},
+    {"Key": "metric", "Value": "count"},
+    {"Key": "aggregation", "Value": "count"},
+    {"Key": "date_field", "Value": "date"},
+    {"Key": "group_by", "Value": "[\"customer_id\"]"},
+    {"Key": "order_by_field", "Value": "metric_value"},
+    {"Key": "order_by_direction", "Value": "desc"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Build comparison output with top and bottom",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var ar = Array.isArray(r.aggregation_result) ? r.aggregation_result : [];\n  if (ar.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Quote Count by Customer', Level: 1 }],\n      Summary: {\n        TopCustomer: null,\n        TopCustomerQuoteCount: 0,\n        BottomCustomer: null,\n        BottomCustomerQuoteCount: 0,\n        TotalCustomers: 0,\n        TotalQuotes: 0\n      },\n      Files: []\n    };\n  }\n  var top = ar[0];\n  var bot = ar[ar.length - 1];\n  var tot = 0;\n  for (var i = 0; i < ar.length; i++) {\n    tot += ar[i].count;\n  }\n  var cd = [];\n  var cl = Math.min(ar.length, 12);\n  for (var j = 0; j < cl; j++) {\n    var g = ar[j].group.customer_id;\n    cd.push({\n      CustomerName: g.label,\n      QuoteCount: ar[j].count\n    });\n  }\n  var td = [];\n  for (var k = 0; k < ar.length; k++) {\n    var x = ar[k].group.customer_id;\n    td.push({\n      CustomerId: x.key,\n      CustomerName: x.label,\n      QuoteCount: ar[k].count,\n      Rank: k + 1\n    });\n  }\n  return {\n    BarCharts: [{\n      Title: 'Quote Count by Customer',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'QuoteCount',\n        YLabel: 'Number of Quotes',\n        YFormat: { Type: 'number' }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Quote Count Details',\n      Columns: [\n        { Header: 'Rank', Type: 'number', Data: 'Rank' },\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Quote Count', Type: 'number', Data: 'QuoteCount' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Quote Count by Customer', Level: 1 }],\n    Summary: {\n      TopCustomer: top.group.customer_id.label,\n      TopCustomerQuoteCount: top.count,\n      BottomCustomer: bot.group.customer_id.label,\n      BottomCustomerQuoteCount: bot.count,\n      TotalCustomers: ar.length,\n      TotalQuotes: tot\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

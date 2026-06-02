@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customer has the smallest sales quote by total amount"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes with default financial-year date range, find the minimum total_amount in a Code step, and return the customer name and quote details as Text summary."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.id, results.customer.name, results.total_amount, results.currency.code, results.date]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all quotes, find minimum by amount, build output]
+Constraints: [retrieve all quotes (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), page_size 200 (tool→page_size), find minimum amount (code), zero quotes→zero-state (defensive), structural validation (defensive)]
+Layout: {Type: Text, Reason: "Single record result with key details"}
+ExpectedData:
+  Summary: [CustomerName, QuoteReference, QuoteAmount, Currency, QuoteDate, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Find quote with minimum amount",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        CustomerName: null,\n        QuoteReference: null,\n        QuoteAmount: 0,\n        Currency: null,\n        QuoteDate: null,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var mn = q[0];\n  for (var i = 1; i < q.length; i++) {\n    if (q[i].total_amount < mn.total_amount) {\n      mn = q[i];\n    }\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      CustomerName: mn.customer.name,\n      QuoteReference: mn.reference,\n      QuoteAmount: mn.total_amount,\n      Currency: mn.currency.code,\n      QuoteDate: mn.date,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

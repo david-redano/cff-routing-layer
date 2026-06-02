@@ -1,0 +1,58 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which products or services appear most frequently in sales quotes during the current period"
+Approach: "Fetch all sales quotes for the current financial year via sales_list_sales_quotes, retrieve full details for each quote to access line items via sales_get_sales_quote in a loop-free aggregation step, then group by product/service name in Code step, count occurrences, sort descending, cap at 12 entries for BarChart; render as BarChart+Table to show ranking with supporting detail."
+Tools:
+  Step1: {Name: analysis_aggregate_entity, Id: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"}
+ToolAccess: {Step1: ".aggregation_result"}
+OutputFields:
+  Step1: [aggregation_result.group.item_id.key, aggregation_result.group.item_id.label, aggregation_result.count, aggregation_result.metric_value]
+RequiredParams:
+  Step1: {entity: "sales_quotes", metric: "quantity", aggregation: "sum", date_field: "date", date_range_from: "2026-01-01", date_range_to: "2026-12-31", group_by: "[\"item_id\"]", order_by_field: "metric_value", order_by_direction: "desc", limit: 12}
+Pipeline: [aggregate quotes by product/service, sort by quantity descending, cap at 12, build chart and table]
+Constraints: [entity: sales_quotes (tool→entity), metric: quantity (tool→metric), aggregation: sum (tool→aggregation), date range 2026-01-01 to 2026-12-31 (tool→date_range_from, tool→date_range_to), group by item (tool→group_by), sort descending by metric (tool→order_by_field, tool→order_by_direction), limit 12 items (tool→limit), zero results→zero-state (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Product ranking with quantities; chart for visual comparison, table for detail"}
+ExpectedData:
+  Summary: [TotalProducts, TotalQuantity, TopProduct, TopProductQuantity, PeriodFrom, PeriodTo, PeriodLabel]
+  BarCharts:
+    - [ProductName (X) vs Quantity (Y), top 12 by quantity]
+  Tables:
+    - [ProductName, TotalQuantity, QuoteCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a",
+  "ToolName": "analysis_aggregate_entity",
+  "StepReason": "Aggregate quotes by product/service",
+  "Input": [
+    {"Key": "entity", "Value": "sales_quotes"},
+    {"Key": "metric", "Value": "quantity"},
+    {"Key": "aggregation", "Value": "sum"},
+    {"Key": "date_field", "Value": "date"},
+    {"Key": "date_range_from", "Value": "2026-01-01"},
+    {"Key": "date_range_to", "Value": "2026-12-31"},
+    {"Key": "group_by", "Value": "[\"item_id\"]"},
+    {"Key": "order_by_field", "Value": "metric_value"},
+    {"Key": "order_by_direction", "Value": "desc"},
+    {"Key": "limit", "Value": "12"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Build chart and table output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var ar = Array.isArray(r.aggregation_result) ? r.aggregation_result : [];\n  if (ar.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Most Quoted Products and Services', Level: 1 }],\n      Summary: {\n        TotalProducts: 0,\n        TotalQuantity: 0,\n        TopProduct: null,\n        TopProductQuantity: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cd = [];\n  var td = [];\n  var tq = 0;\n  for (var i = 0; i < ar.length; i++) {\n    var a = ar[i];\n    var pn = a.group && a.group.item_id ? a.group.item_id.label : 'Unknown';\n    var q = a.metric_value || 0;\n    tq += q;\n    cd.push({\n      ProductName: pn,\n      Quantity: q\n    });\n    td.push({\n      ProductName: pn,\n      TotalQuantity: q,\n      QuoteCount: a.count || 0\n    });\n  }\n  var cl = Math.min(cd.length, 12);\n  cd = cd.slice(0, cl);\n  var tp = cd.length > 0 ? cd[0].ProductName : null;\n  var tpq = cd.length > 0 ? cd[0].Quantity : 0;\n  return {\n    BarCharts: [{\n      Title: 'Most Quoted Products and Services',\n      Series: [{\n        XKey: 'ProductName',\n        YKey: 'Quantity',\n        YLabel: 'Total Quantity',\n        YFormat: { Type: 'number' }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Product and Service Quote Details',\n      Columns: [\n        { Header: 'Product/Service', Type: 'string', Data: 'ProductName' },\n        { Header: 'Total Quantity', Type: 'number', Data: 'TotalQuantity' },\n        { Header: 'Quote Count', Type: 'number', Data: 'QuoteCount' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Most Quoted Products and Services', Level: 1 }],\n    Summary: {\n      TotalProducts: ar.length,\n      TotalQuantity: tq,\n      TopProduct: tp,\n      TopProductQuantity: tpq,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

@@ -1,0 +1,57 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customers have ordered iPhones most frequently"
+Approach: "Use analysis_aggregate_entity to fetch sales orders grouped by customer, filtered to iPhone items, with count aggregation and ordering by metric descending. Return BarChart+Table showing top customers by order frequency with supporting detail."
+Tools:
+  Step1: {Name: analysis_aggregate_entity, Id: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"}
+ToolAccess: {Step1: ".aggregation_result"}
+OutputFields:
+  Step1: [aggregation_result.group.customer_id.key, aggregation_result.group.customer_id.label, aggregation_result.metric_value, aggregation_result.count]
+RequiredParams:
+  Step1: {entity: "sales_orders", metric: "quantity", aggregation: "count", date_field: "date", group_by: "[\"customer_id\"]", filter: "item_name eq 'iPhone'", order_by_field: "metric_value", order_by_direction: "desc", limit: 12}
+Pipeline: [aggregate sales orders by customer filtered to iPhone, order by count descending, cap at 12, build chart and table]
+Constraints: [filter by item name iPhone (tool→filter), group by customer (tool→group_by), order descending by count (tool→order_by_field, tool→order_by_direction), cap chart at 12 (code), zero results→zero-state (defensive), count aggregation (tool→aggregation)]
+Layout: {Type: BarChart+Table, Reason: "Entity ranking (top customers); chart for visual comparison, table for detail"}
+ExpectedData:
+  Summary: [TotalCustomers, TopCustomerOrderCount, Currency]
+  BarCharts:
+    - [CustomerName (X) vs OrderCount (Y), top 12]
+  Tables:
+    - [CustomerName, OrderCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a",
+  "ToolName": "analysis_aggregate_entity",
+  "StepReason": "Aggregate iPhone orders by customer",
+  "Input": [
+    {"Key": "entity", "Value": "sales_orders"},
+    {"Key": "metric", "Value": "quantity"},
+    {"Key": "aggregation", "Value": "count"},
+    {"Key": "date_field", "Value": "date"},
+    {"Key": "group_by", "Value": "[\"customer_id\"]"},
+    {"Key": "filter", "Value": "item_name eq 'iPhone'"},
+    {"Key": "order_by_field", "Value": "metric_value"},
+    {"Key": "order_by_direction", "Value": "desc"},
+    {"Key": "limit", "Value": "12"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Build chart and table output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var ar = Array.isArray(r.aggregation_result) ? r.aggregation_result : [];\n  if (ar.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Customers Who Order iPhones Most Often', Level: 1 }],\n      Summary: { TotalCustomers: 0, TopCustomerOrderCount: 0, Currency: null },\n      Files: []\n    };\n  }\n  var cd = [];\n  var td = [];\n  var mx = 0;\n  for (var i = 0; i < ar.length; i++) {\n    var a = ar[i];\n    var cn = a.group && a.group.customer_id ? a.group.customer_id.label : 'Unknown';\n    var ct = a.metric_value || 0;\n    if (ct > mx) { mx = ct; }\n    cd.push({ CustomerName: cn, OrderCount: ct });\n    td.push({ CustomerName: cn, OrderCount: ct });\n  }\n  var cl = Math.min(cd.length, 12);\n  cd = cd.slice(0, cl);\n  return {\n    BarCharts: [{\n      Title: 'Customers Who Order iPhones Most Often',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'OrderCount',\n        YLabel: 'Order Count',\n        YFormat: { Type: 'number' }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'iPhone Order Frequency by Customer',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName' },\n        { Header: 'Order Count', Type: 'number', Data: 'OrderCount' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Customers Who Order iPhones Most Often', Level: 1 }],\n    Summary: {\n      TotalCustomers: ar.length,\n      TopCustomerOrderCount: mx,\n      Currency: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

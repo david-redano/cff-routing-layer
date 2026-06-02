@@ -1,0 +1,49 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "List all sales orders with reference number 0003 to help user identify the correct one"
+Approach: "Fetch sales orders via sales_list_sales_orders with no customer filter (broadest scope) and no status filter, then filter in Code step to those matching reference '0003', return as Table for user selection."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.id, results.customer.name, results.date, results.status, results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2025-05-01", date_to: "2026-05-01", page_size: "200"}
+Pipeline: [fetch all sales orders, filter by reference 0003, build table output]
+Constraints: [retrieve all orders (tool→default), date range 2025-05-01 to 2026-05-01 (tool→date_from, tool→date_to), filter reference=0003 (code), include Id and CustomerId for links (code), zero matches→zero-state (defensive)]
+Layout: {Type: Table, Reason: "Multiple order records for user selection"}
+ExpectedData:
+  Summary: [OrderCount, PeriodFrom, PeriodTo, PeriodLabel]
+  Tables:
+    - [Reference (linked→Id), CustomerName (linked→CustomerId), Date, Status, Amount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-05-01"},
+    {"Key": "date_to", "Value": "2026-05-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Filter orders by reference 0003",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var oo = Array.isArray(r.results) ? r.results : [];\n  var fd = [];\n  for (var i = 0; i < oo.length; i++) {\n    var o = oo[i];\n    if (o.reference === '0003') {\n      fd.push(o);\n    }\n  }\n  if (fd.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Sales Orders with Reference 0003', Level: 1 }],\n      Summary: {\n        OrderCount: 0,\n        PeriodFrom: '2025-05-01',\n        PeriodTo: '2026-05-01',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var td = [];\n  for (var j = 0; j < fd.length; j++) {\n    var v = fd[j];\n    td.push({\n      Id: v.id,\n      CustomerId: v.customer.id,\n      Reference: v.reference,\n      CustomerName: v.customer.name,\n      Date: v.date,\n      Status: v.status,\n      Amount: v.total_amount,\n      Currency: v.currency.code\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Sales Orders with Reference 0003',\n      Columns: [\n        { Header: 'Reference', Type: 'string', Data: 'Reference', Link: { Type: 'SalesOrder', Id: 'Id' } },\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Date', Type: 'date', Data: 'Date' },\n        { Header: 'Status', Type: 'string', Data: 'Status' },\n        { Header: 'Amount', Type: 'currency', Data: 'Amount', Currency: td[0].Currency }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Sales Orders with Reference 0003', Level: 1 }],\n    Summary: {\n      OrderCount: fd.length,\n      PeriodFrom: '2025-05-01',\n      PeriodTo: '2026-05-01',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

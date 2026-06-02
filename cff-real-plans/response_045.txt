@@ -1,0 +1,48 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Show the total amount of sales invoices issued last month that have already been collected (paid)"
+Approach: "Fetch all sales invoices issued in the prior calendar month (May 2026, since TodaysDate = 2026-06-01) with status 'paid' via sales_list_sales_invoices, sum the total_amount in a Code step, and return as Text Summary with the aggregated metric."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [total_amount, currency.code, status]
+RequiredParams:
+  Step1: {status: "Paid", date_from: "2026-05-01", date_to: "2026-05-31"}
+Pipeline: [fetch paid invoices from last month, sum total amounts, build text output]
+Constraints: [filter: paid status only (tool→status), date range 2026-05-01 to 2026-05-31 (tool→date_from, tool→date_to), currency consistency (defensive), zero paid invoices→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single aggregated monetary value with count context"}
+ExpectedData:
+  Summary: [TotalCollected, InvoiceCount, Currency]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch paid invoices from last month",
+  "Input": [
+    {"Key": "status", "Value": "Paid"},
+    {"Key": "date_from", "Value": "2026-05-01"},
+    {"Key": "date_to", "Value": "2026-05-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Sum collected amounts and build output",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = r.results;\n  if (!Array.isArray(iv)) {\n    throw new Error('Step1 results is not an array');\n  }\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        TotalCollected: 0,\n        InvoiceCount: 0,\n        Currency: null\n      },\n      Files: []\n    };\n  }\n  var cur = iv[0].currency.code;\n  var tot = 0;\n  for (var i = 0; i < iv.length; i++) {\n    if (iv[i].currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    tot += iv[i].total_amount;\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      TotalCollected: tot,\n      InvoiceCount: iv.length,\n      Currency: cur\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "buildOutput",
+  "NextStep": null
+}
+</Step>
+</Response>

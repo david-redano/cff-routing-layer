@@ -37,7 +37,8 @@ public static class CanonicalPhrases
 
         IntentToAgent = plans
             .Where(p => !string.IsNullOrWhiteSpace(p.Intent) && !string.IsNullOrWhiteSpace(p.AgentId))
-            .ToDictionary(p => p.Intent, p => p.AgentId, StringComparer.Ordinal);
+            .GroupBy(p => p.Intent, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().AgentId, StringComparer.Ordinal);
 
         // Keep "Unknown" last — it's a sentinel, not a real plan intent
         Intents = [.. IntentToAgent.Keys, "Unknown"];

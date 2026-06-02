@@ -1,0 +1,67 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate average sales invoice amount grouped by customer type (inferred from the customer 'type' field: business = B2B, individual = B2C)"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices in current financial year, then fetch customer master data via sales_list_customers to obtain type classifications. In a Code step, join invoices to customers by ID, group by inferred B2B/B2C type, calculate average total_amount per group, and return as BarChart+Table for comparison with supporting detail."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+  Step2: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.id, results.customer.id, results.total_amount, results.currency.code]
+  Step2: [results.id, results.type]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+  Step2: {page_size: "200"}
+Pipeline: [fetch all invoices current FY, fetch all customers, join and classify by type, group by B2B/B2C, calculate averages]
+Constraints: [retrieve all invoices (tool→default), retrieve all customers (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), infer B2B from type='business' and B2C from type='individual' (code), group by inferred type (code), calculate average per group (code), currency consistency (defensive), zero invoices→zero-state (defensive), missing customer type→skip record (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity comparison by type; chart shows average per segment, table shows invoice-level detail"}
+ExpectedData:
+  Summary: [B2BAverage, B2CAverage, B2BCount, B2CCount, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+  BarCharts:
+    - [CustomerType (X) vs AverageTicket (Y)]
+  Tables:
+    - [CustomerType, AverageTicket, InvoiceCount, TotalRevenue]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all sales invoices for current FY",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Fetch all customers with type classification",
+  "Input": [
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Join invoices to customers, group by B2B/B2C, calculate averages",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r1 = GetTaskOutput('Step1');\n  var r2 = GetTaskOutput('Step2');\n  if (!r1 || typeof r1 !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!r2 || typeof r2 !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var iv = Array.isArray(r1.results) ? r1.results : [];\n  var cs = Array.isArray(r2.results) ? r2.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Average Sales Ticket by Customer Type', Level: 1 }],\n      Summary: {\n        B2BAverage: 0,\n        B2CAverage: 0,\n        B2BCount: 0,\n        B2CCount: 0,\n        Currency: null,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cm = {};\n  for (var i = 0; i < cs.length; i++) {\n    var c = cs[i];\n    if (c.id && c.type) {\n      cm[c.id] = c.type;\n    }\n  }\n  var cur = iv[0].currency.code;\n  var b2b = { sum: 0, cnt: 0 };\n  var b2c = { sum: 0, cnt: 0 };\n  for (var j = 0; j < iv.length; j++) {\n    var v = iv[j];\n    if (v.currency.code !== cur) { throw new Error('Mixed currencies detected'); }\n    var cid = v.customer.id;\n    var ct = cm[cid];\n    if (!ct) continue;\n    var t = ct === 'business' ? 'B2B' : (ct === 'individual' ? 'B2C' : null);\n    if (t === 'B2B') {\n      b2b.sum += v.total_amount;\n      b2b.cnt += 1;\n    } else if (t === 'B2C') {\n      b2c.sum += v.total_amount;\n      b2c.cnt += 1;\n    }\n  }\n  var b2ba = b2b.cnt > 0 ? b2b.sum / b2b.cnt : 0;\n  var b2ca = b2c.cnt > 0 ? b2c.sum / b2c.cnt : 0;\n  var cd = [];\n  if (b2b.cnt > 0) {\n    cd.push({ CustomerType: 'B2B', AverageTicket: b2ba });\n  }\n  if (b2c.cnt > 0) {\n    cd.push({ CustomerType: 'B2C', AverageTicket: b2ca });\n  }\n  if (cd.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Average Sales Ticket by Customer Type', Level: 1 }],\n      Summary: {\n        B2BAverage: 0,\n        B2CAverage: 0,\n        B2BCount: 0,\n        B2CCount: 0,\n        Currency: cur,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var td = [];\n  if (b2b.cnt > 0) {\n    td.push({\n      CustomerType: 'B2B',\n      AverageTicket: b2ba,\n      InvoiceCount: b2b.cnt,\n      TotalRevenue: b2b.sum\n    });\n  }\n  if (b2c.cnt > 0) {\n    td.push({\n      CustomerType: 'B2C',\n      AverageTicket: b2ca,\n      InvoiceCount: b2c.cnt,\n      TotalRevenue: b2c.sum\n    });\n  }\n  return {\n    BarCharts: [{\n      Title: 'Average Sales Ticket by Customer Type',\n      Series: [{\n        XKey: 'CustomerType',\n        YKey: 'AverageTicket',\n        YLabel: 'Average Ticket Amount',\n        YFormat: { Type: 'currency', Currency: cur }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Sales Ticket Analysis by Type',\n      Columns: [\n        { Header: 'Customer Type', Type: 'string', Data: 'CustomerType' },\n        { Header: 'Average Ticket', Type: 'currency', Data: 'AverageTicket', Currency: cur },\n        { Header: 'Invoice Count', Type: 'number', Data: 'InvoiceCount' },\n        { Header: 'Total Revenue', Type: 'currency', Data: 'TotalRevenue', Currency: cur }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Average Sales Ticket by Customer Type', Level: 1 }],\n    Summary: {\n      B2BAverage: b2ba,\n      B2CAverage: b2ca,\n      B2BCount: b2b.cnt,\n      B2CCount: b2c.cnt,\n      Currency: cur,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

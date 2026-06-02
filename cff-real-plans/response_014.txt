@@ -1,0 +1,66 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customers have not placed any sales orders within the last 30 days"
+Approach: "Fetch all customers via sales_list_customers, fetch all sales orders from the last 30 days via sales_list_sales_orders with date range computed from TodaysDate, then in a Code step identify customers with no orders in that window and return as a Table listing inactive customers."
+Tools:
+  Step1: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+  Step2: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.id, results.name, results.is_active]
+  Step2: [results.customer.id, results.customer.name]
+RequiredParams:
+  Step1: {page_size: "200"}
+  Step2: {date_from: "2026-05-02", date_to: "2026-06-01", page_size: "200"}
+Pipeline: [fetch all active customers, fetch orders last 30 days, identify customers without orders, build table]
+Constraints: [retrieve all active customers (tool→is_active), date range 2026-05-02 to 2026-06-01 (tool→date_from, tool→date_to), identify customers with zero orders in window (code), zero inactive customers→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Table, Reason: "Multiple customer records with no recent activity"}
+ExpectedData:
+  Summary: [TotalCustomers, InactiveCustomers, PeriodFrom, PeriodTo, PeriodLabel]
+  Tables:
+    - [CustomerName (linked→CustomerId), LastOrderDate, DaysSinceOrder]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Fetch all active customers",
+  "Input": [
+    {"Key": "is_active", "Value": "true"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch orders from last 30 days",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-05-02"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Identify customers without recent orders",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var cs = GetTaskOutput('Step1');\n  var os = GetTaskOutput('Step2');\n  if (!cs || typeof cs !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!os || typeof os !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var cust = Array.isArray(cs.results) ? cs.results : [];\n  var ord = Array.isArray(os.results) ? os.results : [];\n  if (cust.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [{ Text: 'Customers Without Recent Orders', Level: 1 }],\n      Summary: { TotalCustomers: 0, InactiveCustomers: 0, PeriodFrom: '2026-05-02', PeriodTo: '2026-06-01', PeriodLabel: 'last 30 days' },\n      Files: []\n    };\n  }\n  var oid = {};\n  for (var i = 0; i < ord.length; i++) {\n    var o = ord[i];\n    oid[o.customer.id] = true;\n  }\n  var nc = [];\n  for (var j = 0; j < cust.length; j++) {\n    var c = cust[j];\n    if (!oid[c.id]) {\n      nc.push({ CustomerId: c.id, CustomerName: c.name });\n    }\n  }\n  if (nc.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [{ Text: 'Customers Without Recent Orders', Level: 1 }],\n      Summary: { TotalCustomers: cust.length, InactiveCustomers: 0, PeriodFrom: '2026-05-02', PeriodTo: '2026-06-01', PeriodLabel: 'last 30 days' },\n      Files: []\n    };\n  }\n  var td = [];\n  for (var k = 0; k < nc.length; k++) {\n    td.push({\n      CustomerId: nc[k].CustomerId,\n      CustomerName: nc[k].CustomerName\n    });\n  }\n  return {\n    BarCharts: [], LineCharts: [], Tables: [{\n      Title: 'Customers Without Recent Orders',\n      Columns: [\n        { Header: 'Customer Name', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Customers Without Recent Orders', Level: 1 }],\n    Summary: { TotalCustomers: cust.length, InactiveCustomers: nc.length, PeriodFrom: '2026-05-02', PeriodTo: '2026-06-01', PeriodLabel: 'last 30 days' },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

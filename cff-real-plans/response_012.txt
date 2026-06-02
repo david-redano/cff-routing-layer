@@ -1,0 +1,50 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customers have sales orders with pending status"
+Approach: "Fetch all sales orders with 'draft' status via sales_list_sales_orders using broadest date range (current financial year), then extract unique customers and their order details in a Code step; render as Table for listing customer-order pairs."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.id, results.customer.name, results.date, results.total_amount, results.currency.code, results.status]
+RequiredParams:
+  Step1: {status: "draft", date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch draft orders, extract customer details, build table output]
+Constraints: [filter: draft status only (tool→status), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), retrieve all customers (tool→default), include Id and CustomerId for links (code), zero draft orders→zero-state (defensive)]
+Layout: {Type: Table, Reason: "Multiple order records with customer details to display"}
+ExpectedData:
+  Summary: [CustomerCount, OrderCount, TotalPendingValue, Currency]
+  Tables:
+    - [CustomerName (linked→CustomerId), OrderReference (linked→OrderId), OrderDate, OrderAmount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all draft sales orders",
+  "Input": [
+    {"Key": "status", "Value": "draft"},
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Extract customer orders and build table",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var oo = Array.isArray(r.results) ? r.results : [];\n  if (oo.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Customers with Pending Orders', Level: 1 }],\n      Summary: { CustomerCount: 0, OrderCount: 0, TotalPendingValue: 0, Currency: null },\n      Files: []\n    };\n  }\n  var cur = oo[0].currency.code;\n  var tot = 0;\n  var cs = {};\n  var td = [];\n  for (var i = 0; i < oo.length; i++) {\n    var v = oo[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    tot += v.total_amount;\n    var cid = v.customer.id;\n    if (!cs[cid]) {\n      cs[cid] = true;\n    }\n    td.push({\n      OrderId: v.id,\n      CustomerId: v.customer.id,\n      CustomerName: v.customer.name,\n      OrderReference: v.reference,\n      OrderDate: v.date,\n      OrderAmount: v.total_amount\n    });\n  }\n  var ccount = Object.keys(cs).length;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Customers with Pending Orders',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Order Reference', Type: 'string', Data: 'OrderReference', Link: { Type: 'SalesOrder', Id: 'OrderId' } },\n        { Header: 'Order Date', Type: 'date', Data: 'OrderDate' },\n        { Header: 'Order Amount', Type: 'currency', Data: 'OrderAmount', Currency: cur }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Customers with Pending Orders', Level: 1 }],\n    Summary: {\n      CustomerCount: ccount,\n      OrderCount: oo.length,\n      TotalPendingValue: tot,\n      Currency: cur\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

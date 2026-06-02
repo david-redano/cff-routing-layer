@@ -1,0 +1,51 @@
+<Reasoning>
+Request: {Cat: Ranking, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify the top 10 customers ranked by percentage of invoices paid on time (on-time payment rate)"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices across current financial year, compute on-time payment rate per customer in Code step (invoices paid on/before due_date ÷ total invoices per customer), rank descending, cap at top 10, render as BarChart+Table for visual comparison with detail breakdown."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.customer.id, results.customer.name, results.due_date, results.paid_date, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all invoices, compute on-time rate per customer, rank by rate desc, cap at 10, build output]
+Constraints: [retrieve all customers (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), on-time = paid_date <= due_date (code), rank by on-time percentage desc (code), max 10 customers in chart (code), include CustomerId for links (code), zero invoices→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity ranking by metric; chart shows top 10 on-time rates, table provides detail (total invoices, on-time count)"}
+ExpectedData:
+  Summary: [TopCustomerCount, TotalCustomersAnalyzed, TotalInvoices, PeriodFrom, PeriodTo, PeriodLabel]
+  BarCharts:
+    - [CustomerName (X) vs OnTimePercentage (Y), top 10 desc]
+  Tables:
+    - [CustomerName (linked→CustomerId), OnTimePercentage, OnTimeInvoices, TotalInvoices]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all sales invoices for analysis",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Compute on-time rate per customer, rank, build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Top Customers by On-Time Payment Rate', Level: 1 }],\n      Summary: {\n        TopCustomerCount: 0,\n        TotalCustomersAnalyzed: 0,\n        TotalInvoices: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var g = {};\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    var cid = v.customer.id;\n    var cn = v.customer.name;\n    if (!g[cid]) {\n      g[cid] = {\n        CustomerId: cid,\n        CustomerName: cn,\n        TotalInvoices: 0,\n        OnTimeInvoices: 0\n      };\n    }\n    g[cid].TotalInvoices += 1;\n    if (v.paid_date && v.due_date && v.paid_date <= v.due_date) {\n      g[cid].OnTimeInvoices += 1;\n    }\n  }\n  var rw = [];\n  var ks = Object.keys(g);\n  for (var j = 0; j < ks.length; j++) {\n    var k = ks[j];\n    var pct = (g[k].OnTimeInvoices / g[k].TotalInvoices) * 100;\n    rw.push({\n      CustomerId: g[k].CustomerId,\n      CustomerName: g[k].CustomerName,\n      OnTimePercentage: Math.round(pct * 100) / 100,\n      OnTimeInvoices: g[k].OnTimeInvoices,\n      TotalInvoices: g[k].TotalInvoices\n    });\n  }\n  rw.sort(function(a, b) { return b.OnTimePercentage - a.OnTimePercentage; });\n  var cd = [];\n  var cl = Math.min(rw.length, 10);\n  for (var c = 0; c < cl; c++) {\n    cd.push({\n      CustomerName: rw[c].CustomerName,\n      OnTimePercentage: rw[c].OnTimePercentage\n    });\n  }\n  var td = [];\n  for (var m = 0; m < rw.length; m++) {\n    td.push({\n      CustomerId: rw[m].CustomerId,\n      CustomerName: rw[m].CustomerName,\n      OnTimePercentage: rw[m].OnTimePercentage,\n      OnTimeInvoices: rw[m].OnTimeInvoices,\n      TotalInvoices: rw[m].TotalInvoices\n    });\n  }\n  return {\n    BarCharts: [{\n      Title: 'Top Customers by On-Time Payment Rate',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'OnTimePercentage',\n        YLabel: 'On-Time Payment Rate (%)',\n        YFormat: { Type: 'percentage' }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'On-Time Payment Performance Details',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'On-Time Rate (%)', Type: 'number', Data: 'OnTimePercentage' },\n        { Header: 'On-Time Invoices', Type: 'number', Data: 'OnTimeInvoices' },\n        { Header: 'Total Invoices', Type: 'number', Data: 'TotalInvoices' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Top Customers by On-Time Payment Rate', Level: 1 }],\n    Summary: {\n      TopCustomerCount: cl,\n      TotalCustomersAnalyzed: rw.length,\n      TotalInvoices: iv.length,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

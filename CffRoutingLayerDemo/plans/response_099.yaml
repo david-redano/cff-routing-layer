@@ -1,0 +1,60 @@
+planId: real-099
+intent: IdentifyProductsServicesAppearFrequently
+agentId: AnalysisAgent
+displayName: Analysis Agent
+description: "Identify which products or services appear most frequently in sales quotes during the current period"
+capabilities:
+  - analysis-aggregation
+understanding: "Identify which products or services appear most frequently in sales quotes during the current period"
+expectedData:
+  summary:
+    - TotalProducts
+    - TotalQuantity
+    - TopProduct
+    - TopProductQuantity
+    - PeriodFrom
+    - PeriodTo
+    - PeriodLabel
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2026-01-01"
+  dateTo: "2026-12-31"
+sampleQueries:
+  - "Identify which products or services appear most frequently in sales quotes during the current period"
+  - "Products or services appear most frequently in sales quotes during the current?"
+steps:
+  - id: 1
+    action: analysis-aggregate-entity
+    stepType: Tool
+    toolName: analysis_aggregate_entity
+    toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
+    stepReason: "Aggregate quotes by product/service"
+    dependsOn: []
+    input:
+      - key: entity
+        value: "sales_quotes"
+      - key: metric
+        value: "quantity"
+      - key: aggregation
+        value: "sum"
+      - key: date_field
+        value: "date"
+      - key: date_range_from
+        value: "2026-01-01"
+      - key: date_range_to
+        value: "2026-12-31"
+      - key: group_by
+        value: "[\"item_id\"]"
+      - key: order_by_field
+        value: "metric_value"
+      - key: order_by_direction
+        value: "desc"
+      - key: limit
+        value: "12"
+    nextStep: 2
+  - id: 2
+    action: compute-build-chart-and-table-output
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Build chart and table output"
+    dependsOn: [1]

@@ -1,0 +1,65 @@
+<Reasoning>
+Request: {Cat: Comparison, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Compare total sales order amounts between March and April"
+Approach: "Fetch sales orders for March 2026 and April 2026 via two sales_list_sales_orders calls, aggregate totals per month in a Code step, calculate the difference, and return as Text summary with comparison metrics."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+  Step2: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.total_amount, results.currency.code]
+  Step2: [results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2026-03-01", date_to: "2026-03-31"}
+  Step2: {date_from: "2026-04-01", date_to: "2026-04-30"}
+Pipeline: [fetch March orders, fetch April orders, compare totals, calculate difference]
+Constraints: [retrieve all customers (tool→default), date range March 2026-03-01 to 2026-03-31 (tool→date_from, tool→date_to), date range April 2026-04-01 to 2026-04-30 (tool→date_from, tool→date_to), currency consistency (defensive), empty results per month→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Comparison of two aggregated monthly totals with difference metric"}
+ExpectedData:
+  Summary: [MarchTotal, AprilTotal, Difference, PercentageChange, Currency, MarchOrderCount, AprilOrderCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch March sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-03-01"},
+    {"Key": "date_to", "Value": "2026-03-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch April sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-04-01"},
+    {"Key": "date_to", "Value": "2026-04-30"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Compare March and April totals",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var m = GetTaskOutput('Step1');\n  var a = GetTaskOutput('Step2');\n  if (!m || typeof m !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!a || typeof a !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var mo = Array.isArray(m.results) ? m.results : [];\n  var ao = Array.isArray(a.results) ? a.results : [];\n  var mt = 0, mc = 0, cur = null;\n  for (var i = 0; i < mo.length; i++) {\n    if (mo[i].currency && mo[i].currency.code) {\n      if (!cur) { cur = mo[i].currency.code; }\n      if (mo[i].currency.code !== cur) { throw new Error('Mixed currencies in March'); }\n    }\n    mt += mo[i].total_amount;\n    mc += 1;\n  }\n  var at = 0, ac = 0;\n  for (var j = 0; j < ao.length; j++) {\n    if (ao[j].currency && ao[j].currency.code) {\n      if (!cur) { cur = ao[j].currency.code; }\n      if (ao[j].currency.code !== cur) { throw new Error('Mixed currencies in April'); }\n    }\n    at += ao[j].total_amount;\n    ac += 1;\n  }\n  var diff = at - mt;\n  var pct = mt !== 0 ? ((diff / mt) * 100) : 0;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      MarchTotal: mt,\n      AprilTotal: at,\n      Difference: diff,\n      PercentageChange: pct,\n      Currency: cur,\n      MarchOrderCount: mc,\n      AprilOrderCount: ac\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

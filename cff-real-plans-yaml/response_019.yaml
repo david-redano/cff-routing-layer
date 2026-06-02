@@ -1,0 +1,63 @@
+planId: real-019
+intent: RetrieveCompleteDetailsSalesOrder
+agentId: SalesAgent
+displayName: Sales Agent
+description: "Retrieve complete details for sales order number 0003 for customer Johnson & Associates"
+capabilities:
+  - sales-customers
+  - sales-orders
+understanding: "Retrieve complete details for sales order number 0003 for customer Johnson & Associates"
+expectedData:
+  summary:
+    - OrderReference
+    - CustomerName
+    - OrderDate
+    - Status
+    - TotalAmount
+    - Currency
+    - LineItemCount
+defaultEntities:
+  companyId: DEMO-001
+sampleQueries:
+  - "Retrieve complete details for sales order number 0003 for customer Johnson & Associates"
+  - "Complete details for sales order number 0003 for customer Johnson & Associates?"
+steps:
+  - id: 1
+    action: sales-list-customers
+    stepType: Tool
+    toolName: sales_list_customers
+    toolId: "de798796-6a20-ce1a-f686-dc224799debc"
+    stepReason: "Search for customer Johnson & Associates"
+    dependsOn: []
+    input:
+      - key: query
+        value: "Johnson & Associates"
+      - key: page_size
+        value: "200"
+    nextStep: 2
+  - id: 2
+    action: compute-validate-single-customer-match
+    stepType: Code
+    functionName: validateCustomer
+    stepReason: "Validate single customer match"
+    dependsOn: [1]
+    nextStep: 3
+  - id: 3
+    action: sales-list-sales-orders
+    stepType: Tool
+    toolName: sales_list_sales_orders
+    toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
+    stepReason: "Fetch sales orders for customer"
+    dependsOn: [2]
+    input:
+      - key: customer_id
+        value: "$.Step2.CustomerId"
+      - key: page_size
+        value: "200"
+    nextStep: 4
+  - id: 4
+    action: compute-filter-order-0003-and-build-output
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Filter order 0003 and build output"
+    dependsOn: [3]

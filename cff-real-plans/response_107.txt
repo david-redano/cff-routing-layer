@@ -1,0 +1,77 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Provide a high-level 3-point summary of the company's current financial health"
+Approach: "Fetch balance sheet (assets, liabilities, equity), income statement (profit/loss, revenue), and trial balance (payables/receivables) for today's date to assess solvency, profitability, and liquidity. Aggregate key metrics in a Code step and return as Text Summary with three discrete financial health indicators."
+Tools:
+  Step1: {Name: accounting_get_balance_sheet, Id: "66edba23-cd30-c840-7cfb-057f0bda1aba"}
+  Step2: {Name: accounting_get_income_statement_es, Id: "efcc4b47-875c-ffc0-3a17-21267e7e64b4"}
+  Step3: {Name: accounting_get_trial_balance, Id: "36d50511-2bd3-c1f1-27dd-6c48905dca06"}
+ToolAccess: {Step1: ".", Step2: ".", Step3: "."}
+OutputFields:
+  Step1: [report.assets.total_assets, report.liabilities.total_liabilities, report.equity.total_equity, report_metadata.currency_code, report_metadata.period_end]
+  Step2: [report.operating_revenue.net_turnover_revenue, report.net_result.profit_or_loss_for_the_period, report_metadata.currency_code, report_metadata.period_end]
+  Step3: [report.ledger_accounts, report_metadata.currency_code]
+RequiredParams:
+  Step1: {end_date: "2026-06-01"}
+  Step2: {end_date: "2026-06-01"}
+  Step3: {end_date: "2026-06-01"}
+Pipeline: [fetch balance sheet, fetch income statement, fetch trial balance, aggregate metrics, calculate ratios, build summary]
+Constraints: [end_date set to today (tool→end_date), retrieve full financial position (tool→default), currency consistency (defensive), validate numeric fields exist (defensive), zero/null values handled gracefully (defensive)]
+Layout: {Type: Text, Reason: "Three discrete financial health metrics; executive summary format"}
+ExpectedData:
+  Summary: [HealthScore, LiquidityRatio, ProfitabilityStatus, Currency, AsOfDate]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "66edba23-cd30-c840-7cfb-057f0bda1aba",
+  "ToolName": "accounting_get_balance_sheet",
+  "StepReason": "Fetch balance sheet for solvency assessment",
+  "Input": [
+    {"Key": "end_date", "Value": "2026-06-01"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "efcc4b47-875c-ffc0-3a17-21267e7e64b4",
+  "ToolName": "accounting_get_income_statement_es",
+  "StepReason": "Fetch income statement for profitability assessment",
+  "Input": [
+    {"Key": "end_date", "Value": "2026-06-01"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Tool",
+  "ToolId": "36d50511-2bd3-c1f1-27dd-6c48905dca06",
+  "ToolName": "accounting_get_trial_balance",
+  "StepReason": "Fetch trial balance for receivables/payables assessment",
+  "Input": [
+    {"Key": "end_date", "Value": "2026-06-01"}
+  ],
+  "NextStep": 4
+}
+</Step>
+<Step>
+{
+  "Id": 4,
+  "Type": "Code",
+  "StepReason": "Calculate financial health metrics and build summary",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var bs = GetTaskOutput('Step1');\n  var is = GetTaskOutput('Step2');\n  var tb = GetTaskOutput('Step3');\n  if (!bs || typeof bs !== 'object') { throw new Error('Step1 invalid'); }\n  if (!is || typeof is !== 'object') { throw new Error('Step2 invalid'); }\n  if (!tb || typeof tb !== 'object') { throw new Error('Step3 invalid'); }\n  var ta = (bs.report && bs.report.assets && bs.report.assets.total_assets) || 0;\n  var tl = (bs.report && bs.report.liabilities && bs.report.liabilities.total_liabilities) || 0;\n  var te = (bs.report && bs.report.equity && bs.report.equity.total_equity) || 0;\n  var rev = (is.report && is.report.operating_revenue && is.report.operating_revenue.net_turnover_revenue) || 0;\n  var pnl = (is.report && is.report.net_result && is.report.net_result.profit_or_loss_for_the_period) || 0;\n  var cur = (bs.report_metadata && bs.report_metadata.currency_code) || 'N/A';\n  var liq = ta > 0 ? (ta - tl) / ta : 0;\n  var prof = rev > 0 ? pnl / rev : 0;\n  var sol = te > 0 ? te / (te + tl) : 0;\n  var hs = (liq > 0.5 && prof > 0 && sol > 0.4) ? 'Healthy' : (liq > 0.3 && prof >= 0 && sol > 0.2) ? 'Stable' : 'At Risk';\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      HealthScore: hs,\n      LiquidityRatio: Math.round(liq * 100) / 100,\n      ProfitabilityStatus: prof > 0 ? 'Profitable' : prof === 0 ? 'Break-even' : 'Loss',\n      Currency: cur,\n      AsOfDate: '2026-06-01'\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

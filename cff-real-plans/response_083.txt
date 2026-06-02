@@ -1,0 +1,66 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customers in the customer base have never received a sales quote"
+Approach: "Fetch all active customers via sales_list_customers, fetch all sales quotes via sales_list_sales_quotes with a broad date range, then in a Code step identify customers who appear in the customer list but NOT in the quotes list by comparing customer IDs; return as Table for easy review."
+Tools:
+  Step1: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+  Step2: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.id, results.name, results.is_active]
+  Step2: [results.customer.id]
+RequiredParams:
+  Step1: {page_size: "200"}
+  Step2: {date_from: "2025-06-01", date_to: "2026-06-01", page_size: "200"}
+Pipeline: [fetch all customers, fetch all quotes, identify customers without quotes, build table]
+Constraints: [retrieve all active customers (tool→default), retrieve all quotes across full date range (tool→date_from, tool→date_to), page_size 200 for both (tool→page_size), filter: active customers only (code), set difference: customers minus quoted customers (code), zero unquoted customers→zero-state (defensive)]
+Layout: {Type: Table, Reason: "Multiple customer records to display"}
+ExpectedData:
+  Summary: [TotalCustomers, UnquotedCustomers, Currency]
+  Tables:
+    - [CustomerName, CustomerCode, Email, Phone]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Fetch all active customers",
+  "Input": [
+    {"Key": "is_active", "Value": "true"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-06-01"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Identify customers without quotes",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var c1 = GetTaskOutput('Step1');\n  var c2 = GetTaskOutput('Step2');\n  if (!c1 || typeof c1 !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!c2 || typeof c2 !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var cs = Array.isArray(c1.results) ? c1.results : [];\n  var qs = Array.isArray(c2.results) ? c2.results : [];\n  if (cs.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [{ Text: 'Customers Without Quotes', Level: 1 }],\n      Summary: { TotalCustomers: 0, UnquotedCustomers: 0, Currency: null },\n      Files: []\n    };\n  }\n  var qc = {};\n  for (var i = 0; i < qs.length; i++) {\n    if (qs[i].customer && qs[i].customer.id) {\n      qc[qs[i].customer.id] = true;\n    }\n  }\n  var nq = [];\n  for (var j = 0; j < cs.length; j++) {\n    var c = cs[j];\n    if (!qc[c.id]) {\n      nq.push({\n        CustomerId: c.id,\n        CustomerName: c.name,\n        CustomerCode: c.code || '',\n        Email: c.primary_email_address || '',\n        Phone: c.primary_phone_number || ''\n      });\n    }\n  }\n  if (nq.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [{ Text: 'Customers Without Quotes', Level: 1 }],\n      Summary: { TotalCustomers: cs.length, UnquotedCustomers: 0, Currency: null },\n      Files: []\n    };\n  }\n  return {\n    BarCharts: [], LineCharts: [],\n    Tables: [{\n      Title: 'Customers Without Quotes',\n      Columns: [\n        { Header: 'Customer Name', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Code', Type: 'string', Data: 'CustomerCode' },\n        { Header: 'Email', Type: 'string', Data: 'Email' },\n        { Header: 'Phone', Type: 'string', Data: 'Phone' }\n      ],\n      Data: nq\n    }],\n    Headings: [{ Text: 'Customers Without Quotes', Level: 1 }],\n    Summary: { TotalCustomers: cs.length, UnquotedCustomers: nq.length, Currency: null },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

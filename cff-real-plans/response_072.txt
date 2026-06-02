@@ -1,0 +1,51 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Show the count of sales quotes created on each day"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes with default financial-year date range, group by creation date in a Code step, count quotes per day, sort chronologically, cap at 24 days for LineChart, render as LineChart+Table to show trend with supporting detail."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.date]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all quotes, group by date, count per day, sort chronologically, cap chart at 24 days]
+Constraints: [retrieve all quotes (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), group by date (code), sort chronologically (code), cap chart at 24 items (code), zero quotes→zero-state (defensive)]
+Layout: {Type: LineChart+Table, Reason: "Time-series by day with underlying detail; chart shows trend, table shows daily breakdown"}
+ExpectedData:
+  Summary: [TotalQuotes, TotalDays, DaysDisplayed, PeriodFrom, PeriodTo, PeriodLabel]
+  LineCharts:
+    - [Date (X) vs QuoteCount (Y), chronological, max 24]
+  Tables:
+    - [Date, QuoteCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"LineChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Group by date, count, and build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Quotes Created Per Day', Level: 1 }],\n      Summary: {\n        TotalQuotes: 0,\n        TotalDays: 0,\n        DaysDisplayed: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var g = {};\n  for (var i = 0; i < q.length; i++) {\n    var d = q[i].date;\n    if (!g[d]) {\n      g[d] = 0;\n    }\n    g[d] += 1;\n  }\n  var ks = Object.keys(g);\n  ks.sort();\n  var cd = [];\n  for (var k = 0; k < ks.length; k++) {\n    cd.push({\n      Date: ks[k],\n      QuoteCount: g[ks[k]]\n    });\n  }\n  var cl = Math.min(cd.length, 24);\n  cd = cd.slice(0, cl);\n  var td = [];\n  for (var m = 0; m < ks.length; m++) {\n    td.push({\n      Date: ks[m],\n      QuoteCount: g[ks[m]]\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [{\n      Title: 'Quotes Created Per Day',\n      Series: [{\n        XKey: 'Date',\n        YKey: 'QuoteCount',\n        YLabel: 'Quote Count',\n        YFormat: { Type: 'number' }\n      }],\n      Data: cd\n    }],\n    Tables: [{\n      Title: 'Daily Quote Creation Breakdown',\n      Columns: [\n        { Header: 'Date', Type: 'date', Data: 'Date' },\n        { Header: 'Quote Count', Type: 'number', Data: 'QuoteCount' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Quotes Created Per Day', Level: 1 }],\n    Summary: {\n      TotalQuotes: q.length,\n      TotalDays: ks.length,\n      DaysDisplayed: cl,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

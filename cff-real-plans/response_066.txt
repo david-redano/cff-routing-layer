@@ -1,0 +1,73 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customer has the largest sales quote by total amount"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes with default 1-year date range, find the quote with maximum total_amount in a Code step, retrieve full details via sales_get_sales_quote, and return Text summary with customer name and quote amount."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+  Step3: {Name: sales_get_sales_quote, Id: "a271e014-571d-860e-d327-6bdb7fc7c2b6"}
+ToolAccess: {Step1: ".results", Step3: "."}
+OutputFields:
+  Step1: [results.id, results.total_amount, results.customer.name, results.currency.code]
+  Step3: [customer.name, total_amount, currency.code, reference, date]
+RequiredParams:
+  Step1: {date_from: "2025-06-01", date_to: "2026-06-01", page_size: "200"}
+  Step3: {sales_quote_id: "$.Step2.QuoteId"}
+Pipeline: [fetch all quotes, identify max by amount, retrieve full details, build output]
+Constraints: [retrieve all quotes (tool→default), date range 2025-06-01 to 2026-06-01 (tool→date_from, tool→date_to), find maximum total_amount (code), single quote result (code), zero quotes→zero-state (defensive), currency consistency (defensive)]
+Layout: {Type: Text, Reason: "Single record with key attributes"}
+ExpectedData:
+  Summary: [CustomerName, QuoteAmount, Currency, QuoteReference, QuoteDate]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-06-01"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Find quote with maximum amount",
+  "FunctionName": "findMaxQuote",
+  "Function": "function findMaxQuote() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    AbortPlan('No quotes found in the system');\n  }\n  var mx = q[0];\n  for (var i = 1; i < q.length; i++) {\n    if (q[i].total_amount > mx.total_amount) {\n      mx = q[i];\n    }\n  }\n  return { QuoteId: mx.id, CustomerName: mx.customer.name, MaxAmount: mx.total_amount };\n}",
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Tool",
+  "ToolId": "a271e014-571d-860e-d327-6bdb7fc7c2b6",
+  "ToolName": "sales_get_sales_quote",
+  "StepReason": "Retrieve full details of largest quote",
+  "Input": [
+    {"Key": "sales_quote_id", "Value": "$.Step2.QuoteId"}
+  ],
+  "NextStep": 4
+}
+</Step>
+<Step>
+{
+  "Id": 4,
+  "Type": "Code",
+  "StepReason": "Build final output with quote details",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var m = GetTaskOutput('Step2');\n  var d = GetTaskOutput('Step3');\n  if (!d || typeof d !== 'object') {\n    throw new Error('Step3 returned invalid output');\n  }\n  var cur = d.currency && d.currency.code ? d.currency.code : null;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      CustomerName: m.CustomerName,\n      QuoteAmount: d.total_amount,\n      Currency: cur,\n      QuoteReference: d.reference,\n      QuoteDate: d.date\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

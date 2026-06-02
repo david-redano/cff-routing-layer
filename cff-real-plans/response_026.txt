@@ -1,0 +1,100 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Retrieve details for sales order number 0003 for customer ABC Industries with order date January 15, 2024"
+Approach: "Search for customer ABC Industries via sales_list_customers to obtain the customer ID, then fetch sales orders for that customer via sales_list_sales_orders filtered to the date range around January 15, 2024, identify order 0003 in Code step, and retrieve full details via sales_get_sales_order. Return order details as Text summary with key fields."
+Tools:
+  Step1: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+  Step3: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+  Step5: {Name: sales_get_sales_order, Id: "bb53c0b2-0434-0479-4f19-6756b0002ab3"}
+ToolAccess: {Step1: ".results", Step3: ".results", Step5: "."}
+OutputFields:
+  Step1: [results.id, results.name]
+  Step3: [results.id, results.reference, results.date, results.customer.id, results.customer.name, results.total_amount, results.currency.code]
+  Step5: [id, reference, date, customer.id, customer.name, status, total_amount, net_amount, currency.code, items]
+RequiredParams:
+  Step1: {query: "ABC Industries"}
+  Step3: {customer_id: "$.Step2.CustomerId", date_from: "2024-01-01", date_to: "2024-01-31"}
+  Step5: {sales_order_id: "$.Step4.OrderId"}
+Pipeline: [search customer ABC Industries, extract ID, fetch orders for Jan 2024, find order 0003, retrieve full details]
+Constraints: [validate single customer match (code), filter by customer (tool→customer_id), date range 2024-01-01 to 2024-01-31 (tool→date_from, tool→date_to), validate order 0003 found (code), zero orders→abort (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Text, Reason: "Single order detail record with multiple attributes"}
+ExpectedData:
+  Summary: [OrderReference, CustomerName, OrderDate, Status, TotalAmount, Currency, ItemCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Search for customer ABC Industries",
+  "Input": [
+    {"Key": "query", "Value": "ABC Industries"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Validate single customer match",
+  "Function": "function validateCustomer() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var cs = r.results;\n  if (!Array.isArray(cs)) {\n    throw new Error('Step1 results is not an array');\n  }\n  if (cs.length === 0) {\n    AbortPlan('No customer found matching ABC Industries');\n  }\n  if (cs.length > 1) {\n    AbortPlan('Multiple customers found matching ABC Industries. Please specify further.');\n  }\n  return { CustomerId: cs[0].id, CustomerName: cs[0].name };\n}",
+  "FunctionName": "validateCustomer",
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch orders for customer in January 2024",
+  "Input": [
+    {"Key": "customer_id", "Value": "$.Step2.CustomerId"},
+    {"Key": "date_from", "Value": "2024-01-01"},
+    {"Key": "date_to", "Value": "2024-01-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 4
+}
+</Step>
+<Step>
+{
+  "Id": 4,
+  "Type": "Code",
+  "StepReason": "Find order 0003 and extract ID",
+  "Function": "function findOrder() {\n  var c = GetTaskOutput('Step2');\n  var r = GetTaskOutput('Step3');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step3 returned invalid output');\n  }\n  var os = r.results;\n  if (!Array.isArray(os)) {\n    throw new Error('Step3 results is not an array');\n  }\n  if (os.length === 0) {\n    AbortPlan('No sales orders found for ABC Industries in January 2024');\n  }\n  var found = null;\n  for (var i = 0; i < os.length; i++) {\n    if (os[i].reference === '0003') {\n      found = os[i];\n      break;\n    }\n  }\n  if (!found) {\n    AbortPlan('Sales order 0003 not found for ABC Industries in January 2024');\n  }\n  return { OrderId: found.id, OrderReference: found.reference };\n}",
+  "FunctionName": "findOrder",
+  "NextStep": 5
+}
+</Step>
+<Step>
+{
+  "Id": 5,
+  "Type": "Tool",
+  "ToolId": "bb53c0b2-0434-0479-4f19-6756b0002ab3",
+  "ToolName": "sales_get_sales_order",
+  "StepReason": "Retrieve full order details",
+  "Input": [
+    {"Key": "sales_order_id", "Value": "$.Step4.OrderId"}
+  ],
+  "NextStep": 6
+}
+</Step>
+<Step>
+{
+  "Id": 6,
+  "Type": "Code",
+  "StepReason": "Build order detail output",
+  "Function": "function buildOutput() {\n  var c = GetTaskOutput('Step2');\n  var o = GetTaskOutput('Step5');\n  if (!o || typeof o !== 'object') {\n    throw new Error('Step5 returned invalid output');\n  }\n  var its = Array.isArray(o.items) ? o.items : [];\n  var cur = o.currency && o.currency.code ? o.currency.code : null;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      OrderReference: o.reference,\n      CustomerName: o.customer && o.customer.name ? o.customer.name : c.CustomerName,\n      OrderDate: o.date,\n      Status: o.status,\n      TotalAmount: o.total_amount,\n      NetAmount: o.net_amount,\n      Currency: cur,\n      ItemCount: its.length\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "buildOutput",
+  "NextStep": null
+}
+</Step>
+</Response>

@@ -1,0 +1,52 @@
+planId: real-011
+intent: IdentifyCustomersOrderedIphonesFrequently
+agentId: AnalysisAgent
+displayName: Analysis Agent
+description: "Identify which customers have ordered iPhones most frequently"
+capabilities:
+  - analysis-aggregation
+understanding: "Identify which customers have ordered iPhones most frequently"
+expectedData:
+  summary:
+    - TotalCustomers
+    - TopCustomerOrderCount
+    - Currency
+defaultEntities:
+  companyId: DEMO-001
+sampleQueries:
+  - "Identify which customers have ordered iPhones most frequently"
+  - "Customers have ordered iPhones most frequently?"
+steps:
+  - id: 1
+    action: analysis-aggregate-entity
+    stepType: Tool
+    toolName: analysis_aggregate_entity
+    toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
+    stepReason: "Aggregate iPhone orders by customer"
+    dependsOn: []
+    input:
+      - key: entity
+        value: "sales_orders"
+      - key: metric
+        value: "quantity"
+      - key: aggregation
+        value: "count"
+      - key: date_field
+        value: "date"
+      - key: group_by
+        value: "[\"customer_id\"]"
+      - key: filter
+        value: "item_name eq 'iPhone'"
+      - key: order_by_field
+        value: "metric_value"
+      - key: order_by_direction
+        value: "desc"
+      - key: limit
+        value: "12"
+    nextStep: 2
+  - id: 2
+    action: compute-build-chart-and-table-output
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Build chart and table output"
+    dependsOn: [1]

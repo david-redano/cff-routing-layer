@@ -1,0 +1,66 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customers have not placed any sales orders within the last 30 days"
+Approach: "Fetch all sales orders from the last 30 days via sales_list_sales_orders, extract unique customer IDs, then fetch the complete customer list via sales_list_customers, and use a Code step to identify customers NOT in the recent orders set; return as Table for easy review."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+  Step2: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.customer.id, results.customer.name]
+  Step2: [results.id, results.name, results.is_active]
+RequiredParams:
+  Step1: {date_from: "2026-05-02", date_to: "2026-06-01", page_size: "200"}
+  Step2: {is_active: "true", page_size: "200"}
+Pipeline: [fetch recent orders, fetch active customers, identify inactive customers, build output]
+Constraints: [date range 2026-05-02 to 2026-06-01 (tool→date_from, tool→date_to), filter active customers only (tool→is_active), retrieve all customers (tool→default), identify customers without recent orders (code), zero inactive customers→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Table, Reason: "Multiple customer records to display"}
+ExpectedData:
+  Summary: [TotalActiveCustomers, InactiveCustomerCount, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+  Tables:
+    - [CustomerName (linked→CustomerId), LastOrderDate]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch orders from last 30 days",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-05-02"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Fetch all active customers",
+  "Input": [
+    {"Key": "is_active", "Value": "true"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Identify customers without recent orders",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var o = GetTaskOutput('Step1');\n  var c = GetTaskOutput('Step2');\n  if (!o || typeof o !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!c || typeof c !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var ord = Array.isArray(o.results) ? o.results : [];\n  var cust = Array.isArray(c.results) ? c.results : [];\n  var act = {};\n  for (var i = 0; i < ord.length; i++) {\n    var cid = ord[i].customer.id;\n    act[cid] = true;\n  }\n  var ina = [];\n  for (var j = 0; j < cust.length; j++) {\n    var v = cust[j];\n    if (!act[v.id]) {\n      ina.push({ CustomerId: v.id, CustomerName: v.name });\n    }\n  }\n  if (ina.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Customers Without Recent Orders', Level: 1 }],\n      Summary: {\n        TotalActiveCustomers: cust.length,\n        InactiveCustomerCount: 0,\n        Currency: null,\n        PeriodFrom: '2026-05-02',\n        PeriodTo: '2026-06-01',\n        PeriodLabel: 'last 30 days'\n      },\n      Files: []\n    };\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Customers Without Recent Orders',\n      Columns: [\n        { Header: 'Customer Name', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } }\n      ],\n      Data: ina\n    }],\n    Headings: [{ Text: 'Customers Without Recent Orders', Level: 1 }],\n    Summary: {\n      TotalActiveCustomers: cust.length,\n      InactiveCustomerCount: ina.length,\n      Currency: null,\n      PeriodFrom: '2026-05-02',\n      PeriodTo: '2026-06-01',\n      PeriodLabel: 'last 30 days'\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

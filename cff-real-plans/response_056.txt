@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "User wants to know the total count of invoices in the system"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices using a broad date range (current financial year), then count the total items from pagination metadata; return as Text Summary with invoice count."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [pagination.total_items]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all invoices with pagination, extract total count from metadata]
+Constraints: [retrieve all invoices (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), page_size 200 (tool→page_size), extract total_items from pagination (code)]
+Layout: {Type: Text, Reason: "Single numeric metric — total invoice count"}
+ExpectedData:
+  Summary: [TotalInvoices]
+Checks: [tool-id-name-match, required-params-complete, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all invoices to count total",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Extract total invoice count",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var p = r.pagination;\n  if (!p || typeof p !== 'object') {\n    throw new Error('Step1 pagination metadata missing');\n  }\n  var t = p.total_items;\n  if (typeof t !== 'number') {\n    throw new Error('total_items is not a number');\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      TotalInvoices: t\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "buildOutput",
+  "NextStep": null
+}
+</Step>
+</Response>

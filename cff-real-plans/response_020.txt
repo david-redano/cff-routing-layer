@@ -1,0 +1,49 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Find sales orders with total amounts exceeding €1,000"
+Approach: "Fetch all sales orders via sales_list_sales_orders with default financial-year date range, filter by amount > 1000 in Code step, return as Table with order details and amounts for user review."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.id, results.customer.name, results.date, results.total_amount, results.currency.code, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31"}
+Pipeline: [fetch all sales orders, filter amount > 1000, build table output]
+Constraints: [filter: total_amount > 1000 (code), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), include Id and CustomerId for links (code), zero results→zero-state (defensive), currency validation (defensive)]
+Layout: {Type: Table, Reason: "Multiple order records with filtering; listing without grouping signal"}
+ExpectedData:
+  Summary: [OrderCount, TotalValue, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+  Tables:
+    - [Reference (linked→Id), CustomerName (linked→CustomerId), Date, Amount, Status]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Filter orders > €1,000 and build table",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var oo = Array.isArray(r.results) ? r.results : [];\n  if (oo.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Orders Over €1,000', Level: 1 }],\n      Summary: {\n        OrderCount: 0,\n        TotalValue: 0,\n        Currency: null,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = oo[0].currency.code;\n  var fd = [];\n  var tot = 0;\n  for (var i = 0; i < oo.length; i++) {\n    var v = oo[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot filter');\n    }\n    if (v.total_amount > 1000) {\n      fd.push(v);\n      tot += v.total_amount;\n    }\n  }\n  if (fd.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Orders Over €1,000', Level: 1 }],\n      Summary: {\n        OrderCount: 0,\n        TotalValue: 0,\n        Currency: cur,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var td = [];\n  for (var j = 0; j < fd.length; j++) {\n    var x = fd[j];\n    td.push({\n      Id: x.id,\n      CustomerId: x.customer.id,\n      Reference: x.reference,\n      CustomerName: x.customer.name,\n      Date: x.date,\n      TotalAmount: x.total_amount,\n      Status: x.status\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Orders Over €1,000',\n      Columns: [\n        { Header: 'Order Reference', Type: 'string', Data: 'Reference', Link: { Type: 'SalesOrder', Id: 'Id' } },\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Date', Type: 'date', Data: 'Date' },\n        { Header: 'Amount', Type: 'currency', Data: 'TotalAmount', Currency: cur },\n        { Header: 'Status', Type: 'string', Data: 'Status' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Orders Over €1,000', Level: 1 }],\n    Summary: {\n      OrderCount: fd.length,\n      TotalValue: tot,\n      Currency: cur,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

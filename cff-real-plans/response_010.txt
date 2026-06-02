@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customer has the highest average order value"
+Approach: "Fetch all sales orders via sales_list_sales_orders with current financial year date range, group by customer in Code step, calculate average order value per customer, sort descending, return top customer as Text summary with supporting detail."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.customer.id, results.customer.name, results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all sales orders, group by customer, calculate average per customer, identify highest]
+Constraints: [retrieve all customers (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), page_size 200 (tool→page_size), group by customer (code), calculate average (code), currency consistency (defensive), empty orders→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single top result with metric value"}
+ExpectedData:
+  Summary: [TopCustomer, HighestAverageOrder, Currency, TotalOrders, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate average order per customer",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var o = Array.isArray(r.results) ? r.results : [];\n  if (o.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        TopCustomer: null,\n        HighestAverageOrder: 0,\n        Currency: null,\n        TotalOrders: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = o[0].currency.code;\n  var g = {};\n  for (var i = 0; i < o.length; i++) {\n    var v = o[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    var cid = v.customer.id;\n    var cn = v.customer.name;\n    if (!g[cid]) {\n      g[cid] = { CustomerName: cn, Total: 0, Count: 0 };\n    }\n    g[cid].Total += v.total_amount;\n    g[cid].Count += 1;\n  }\n  var ks = Object.keys(g);\n  var mx = null;\n  var mxAvg = -1;\n  for (var j = 0; j < ks.length; j++) {\n    var k = ks[j];\n    var avg = g[k].Total / g[k].Count;\n    if (avg > mxAvg) {\n      mxAvg = avg;\n      mx = g[k];\n    }\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      TopCustomer: mx.CustomerName,\n      HighestAverageOrder: Math.round(mxAvg * 100) / 100,\n      Currency: cur,\n      TotalOrders: mx.Count,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

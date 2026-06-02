@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which sales order has the highest total monetary amount"
+Approach: "Fetch all sales orders via sales_list_sales_orders with current financial year date range (default), find the order with maximum total_amount in a Code step, return Text summary with order details."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.name, results.total_amount, results.currency.code, results.date, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all sales orders, find maximum by total_amount, build output]
+Constraints: [retrieve all orders (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), page_size 200 (tool→page_size), zero orders→zero-state (defensive), find max amount (code)]
+Layout: {Type: Text, Reason: "Single order record with highest amount"}
+ExpectedData:
+  Summary: [OrderReference, CustomerName, TotalAmount, Currency, OrderDate, Status]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Find order with highest total amount",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var o = Array.isArray(r.results) ? r.results : [];\n  if (o.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        OrderReference: null,\n        CustomerName: null,\n        TotalAmount: 0,\n        Currency: null,\n        OrderDate: null,\n        Status: null\n      },\n      Files: []\n    };\n  }\n  var mx = o[0];\n  for (var i = 1; i < o.length; i++) {\n    if (o[i].total_amount > mx.total_amount) {\n      mx = o[i];\n    }\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      OrderReference: mx.reference,\n      CustomerName: mx.customer.name,\n      TotalAmount: mx.total_amount,\n      Currency: mx.currency.code,\n      OrderDate: mx.date,\n      Status: mx.status\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

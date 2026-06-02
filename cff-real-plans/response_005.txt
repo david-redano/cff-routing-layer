@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "User wants to know which invoice has the highest amount"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices using current financial year date range, then in a Code step find the invoice with maximum total_amount and return its details as Text Summary."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [id, reference, customer.id, customer.name, date, total_amount, currency.code, status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all sales invoices, find maximum by total_amount, return details]
+Constraints: [retrieve all invoices (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), find max amount (code), empty results→zero-state (defensive), structural validation (defensive)]
+Layout: {Type: Text, Reason: "Single invoice detail with highest amount"}
+ExpectedData:
+  Summary: [InvoiceReference, CustomerName, InvoiceDate, HighestAmount, Currency]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all sales invoices",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Find invoice with highest amount",
+  "Function": "function findMaxInvoice() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = r.results;\n  if (!Array.isArray(iv)) {\n    throw new Error('Step1 results is not an array');\n  }\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        InvoiceReference: null,\n        CustomerName: null,\n        InvoiceDate: null,\n        HighestAmount: 0,\n        Currency: null\n      },\n      Files: []\n    };\n  }\n  var mx = iv[0];\n  for (var i = 1; i < iv.length; i++) {\n    if (iv[i].total_amount > mx.total_amount) {\n      mx = iv[i];\n    }\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      InvoiceReference: mx.reference,\n      CustomerName: mx.customer.name,\n      InvoiceDate: mx.date,\n      HighestAmount: mx.total_amount,\n      Currency: mx.currency.code\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "findMaxInvoice",
+  "NextStep": null
+}
+</Step>
+</Response>

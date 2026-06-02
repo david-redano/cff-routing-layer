@@ -1,0 +1,61 @@
+<Reasoning>
+Request: {Cat: Validation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Determine whether the trial balance and balance sheet are in agreement — specifically, whether debits equal credits on the trial balance and whether the balance sheet totals reconcile to those balances"
+Approach: "Fetch trial balance and balance sheet for the same period via accounting_get_trial_balance and accounting_get_balance_sheet, then in a Code step validate: (1) trial balance debits = credits, (2) balance sheet assets = liabilities + equity, (3) trial balance ledger account balances reconcile to balance sheet line items. Return Text summary with validation results and any discrepancies found."
+Tools:
+  Step1: {Name: accounting_get_trial_balance, Id: "36d50511-2bd3-c1f1-27dd-6c48905dca06"}
+  Step2: {Name: accounting_get_balance_sheet, Id: "66edba23-cd30-c840-7cfb-057f0bda1aba"}
+ToolAccess: {Step1: ".report", Step2: ".report"}
+OutputFields:
+  Step1: [report.ledger_accounts, report_metadata.currency_code, report_metadata.period_start, report_metadata.period_end]
+  Step2: [report.assets.total_assets, report.liabilities.total_liabilities, report.equity.total_equity, report_metadata.currency_code, report_metadata.period_start, report_metadata.period_end]
+RequiredParams:
+  Step1: {end_date: "2026-06-01"}
+  Step2: {end_date: "2026-06-01"}
+Pipeline: [fetch trial balance, fetch balance sheet, validate reconciliation, build output]
+Constraints: [use same end_date for both tools (tool→end_date), validate TB debits=credits (code), validate BS equation (code), reconcile TB to BS (code), currency consistency (defensive), structural validation on both outputs (defensive)]
+Layout: {Type: Text, Reason: "Yes/no validation with supporting metrics"}
+ExpectedData:
+  Summary: [TrialBalanceInBalance, BalanceSheetInBalance, ReconciliationStatus, TotalDebits, TotalCredits, TotalAssets, TotalLiabilities, TotalEquity, Currency, DiscrepancyDescription]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "36d50511-2bd3-c1f1-27dd-6c48905dca06",
+  "ToolName": "accounting_get_trial_balance",
+  "StepReason": "Fetch trial balance",
+  "Input": [
+    {"Key": "end_date", "Value": "2026-06-01"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "66edba23-cd30-c840-7cfb-057f0bda1aba",
+  "ToolName": "accounting_get_balance_sheet",
+  "StepReason": "Fetch balance sheet",
+  "Input": [
+    {"Key": "end_date", "Value": "2026-06-01"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Validate trial balance and balance sheet reconciliation",
+  "FunctionName": "validateReconciliation",
+  "Function": "function validateReconciliation() {\n  var tb = GetTaskOutput('Step1');\n  var bs = GetTaskOutput('Step2');\n  if (!tb || typeof tb !== 'object') { throw new Error('Trial balance output invalid'); }\n  if (!bs || typeof bs !== 'object') { throw new Error('Balance sheet output invalid'); }\n  var la = tb.report && tb.report.ledger_accounts ? tb.report.ledger_accounts : [];\n  if (!Array.isArray(la)) { throw new Error('Trial balance ledger_accounts not array'); }\n  var cur = tb.report_metadata && tb.report_metadata.currency_code ? tb.report_metadata.currency_code : null;\n  var bscur = bs.report_metadata && bs.report_metadata.currency_code ? bs.report_metadata.currency_code : null;\n  if (cur !== bscur) { throw new Error('Currency mismatch between trial balance and balance sheet'); }\n  var tdb = 0, tcr = 0;\n  for (var i = 0; i < la.length; i++) {\n    var acc = la[i];\n    tdb += acc.debit_balance || 0;\n    tcr += acc.credit_balance || 0;\n  }\n  var tbInBal = Math.abs(tdb - tcr) < 0.01;\n  var ta = bs.report && bs.report.assets && bs.report.assets.total_assets ? bs.report.assets.total_assets : 0;\n  var tl = bs.report && bs.report.liabilities && bs.report.liabilities.total_liabilities ? bs.report.liabilities.total_liabilities : 0;\n  var te = bs.report && bs.report.equity && bs.report.equity.total_equity ? bs.report.equity.total_equity : 0;\n  var bsInBal = Math.abs(ta - (tl + te)) < 0.01;\n  var tbTotal = tdb + tcr;\n  var bsTotal = ta + tl + te;\n  var reconciled = Math.abs(tbTotal - bsTotal) < 0.01;\n  var disc = '';\n  if (!tbInBal) { disc += 'Trial balance debits (' + tdb.toFixed(2) + ') do not equal credits (' + tcr.toFixed(2) + '). '; }\n  if (!bsInBal) { disc += 'Balance sheet equation not satisfied: Assets (' + ta.toFixed(2) + ') != Liabilities (' + tl.toFixed(2) + ') + Equity (' + te.toFixed(2) + '). '; }\n  if (!reconciled) { disc += 'Trial balance totals do not reconcile to balance sheet totals. '; }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      TrialBalanceInBalance: tbInBal,\n      BalanceSheetInBalance: bsInBal,\n      ReconciliationStatus: reconciled ? 'Reconciled' : 'Discrepancies Found',\n      TotalDebits: tdb,\n      TotalCredits: tcr,\n      TotalAssets: ta,\n      TotalLiabilities: tl,\n      TotalEquity: te,\n      Currency: cur,\n      DiscrepancyDescription: disc.length > 0 ? disc : null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

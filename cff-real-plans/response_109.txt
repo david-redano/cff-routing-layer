@@ -1,0 +1,45 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which ledger account in the trial balance had the largest change in balance"
+Approach: "Fetch trial balance for current financial year via accounting_get_trial_balance, compute absolute movement (debit_balance + credit_balance change) for each account in a Code step, rank by movement descending, return the top account as Text with account name, code, and movement amount."
+Tools:
+  Step1: {Name: accounting_get_trial_balance, Id: "36d50511-2bd3-c1f1-27dd-6c48905dca06"}
+ToolAccess: {Step1: ".report"}
+OutputFields:
+  Step1: [report.ledger_accounts.code, report.ledger_accounts.name, report.ledger_accounts.debit_balance, report.ledger_accounts.credit_balance, report_metadata.currency_code]
+RequiredParams:
+  Step1: {end_date: "2026-06-01"}
+Pipeline: [fetch trial balance, compute movement per account, identify largest movement, build output]
+Constraints: [retrieve all accounts (tool→default), end_date set to TodaysDate (tool→end_date), compute absolute movement magnitude (code), identify single top account (code), zero accounts→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Text, Reason: "Single-entity superlative: which account has the largest movement — answer is one account name/code"}
+ExpectedData:
+  Summary: [TopAccountCode, TopAccountName, LargestMovement, Currency, TotalAccountsAnalysed, TieCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, single-entity-summary]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "36d50511-2bd3-c1f1-27dd-6c48905dca06",
+  "ToolName": "accounting_get_trial_balance",
+  "StepReason": "Fetch trial balance for current period",
+  "Input": [
+    {"Key": "end_date", "Value": "2026-06-01"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Identify account with largest movement",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var la = r.report && r.report.ledger_accounts;\n  if (!Array.isArray(la)) {\n    throw new Error('Step1 ledger_accounts is not an array');\n  }\n  if (la.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        TopAccountCode: null,\n        TopAccountName: null,\n        LargestMovement: 0,\n        Currency: null,\n        TotalAccountsAnalysed: 0,\n        TieCount: 0\n      },\n      Files: []\n    };\n  }\n  var cur = (r.report_metadata && r.report_metadata.currency_code) || null;\n  var accts = [];\n  for (var i = 0; i < la.length; i++) {\n    var a = la[i];\n    var mov = Math.abs((a.debit_balance || 0) + (a.credit_balance || 0));\n    accts.push({\n      code: a.code,\n      name: a.name,\n      movement: mov\n    });\n  }\n  accts.sort(function(x, y) { return y.movement - x.movement; });\n  var top = accts[0].movement;\n  var tied = [];\n  for (var j = 0; j < accts.length; j++) {\n    if (accts[j].movement === top) {\n      tied.push(accts[j]);\n    } else {\n      break;\n    }\n  }\n  var tc = tied.length;\n  var cn = tied.map(function(t) { return t.name; }).join(', ');\n  var cc = tied.map(function(t) { return t.code; }).join(', ');\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      TopAccountCode: cc,\n      TopAccountName: cn,\n      LargestMovement: top,\n      Currency: cur,\n      TotalAccountsAnalysed: accts.length,\n      TieCount: tc\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

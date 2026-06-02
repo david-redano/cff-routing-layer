@@ -1,0 +1,50 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "List all sales orders that are currently in Pending state"
+Approach: "Fetch sales orders filtered by status='Pending' via sales_list_sales_orders with a broad date range (current financial year), then return as a Table with order details for user review."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.id, results.customer.name, results.date, results.total_amount, results.currency.code, results.status]
+RequiredParams:
+  Step1: {status: "pending", date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch pending orders, build table output]
+Constraints: [filter: pending status only (tool→status), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), retrieve all matching orders (tool→default), include CustomerId for links (code), zero pending orders→zero-state (defensive)]
+Layout: {Type: Table, Reason: "Multiple order records to display with customer and amount details"}
+ExpectedData:
+  Summary: [OrderCount, TotalAmount, Currency]
+  Tables:
+    - [Reference (linked→Id), CustomerName (linked→CustomerId), Date, Amount, Status]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch pending sales orders",
+  "Input": [
+    {"Key": "status", "Value": "pending"},
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Build table output with pending orders",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var oo = Array.isArray(r.results) ? r.results : [];\n  if (oo.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Pending Sales Orders', Level: 1 }],\n      Summary: { OrderCount: 0, TotalAmount: 0, Currency: null },\n      Files: []\n    };\n  }\n  var cur = oo[0].currency.code;\n  var tot = 0;\n  var td = [];\n  for (var i = 0; i < oo.length; i++) {\n    var v = oo[i];\n    tot += v.total_amount;\n    td.push({\n      Id: v.id,\n      CustomerId: v.customer.id,\n      Reference: v.reference,\n      CustomerName: v.customer.name,\n      Date: v.date,\n      TotalAmount: v.total_amount,\n      Status: v.status\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Pending Sales Orders',\n      Columns: [\n        { Header: 'Order Reference', Type: 'string', Data: 'Reference', Link: { Type: 'SalesOrder', Id: 'Id' } },\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Order Date', Type: 'date', Data: 'Date' },\n        { Header: 'Total Amount', Type: 'currency', Data: 'TotalAmount', Currency: cur },\n        { Header: 'Status', Type: 'string', Data: 'Status' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Pending Sales Orders', Level: 1 }],\n    Summary: { OrderCount: oo.length, TotalAmount: tot, Currency: cur },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

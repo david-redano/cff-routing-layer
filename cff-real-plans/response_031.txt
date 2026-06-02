@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Count the number of sales orders created on 16 April 2026"
+Approach: "Fetch sales orders via sales_list_sales_orders with date_from and date_to both set to 2026-04-16 (single day), count the results in a Code step, return Text summary with order count."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.date]
+RequiredParams:
+  Step1: {date_from: "2026-04-16", date_to: "2026-04-16"}
+Pipeline: [fetch orders for 2026-04-16, count results, build output]
+Constraints: [date range 2026-04-16 to 2026-04-16 (tool→date_from, tool→date_to), retrieve all orders (tool→default), zero orders→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single count metric"}
+ExpectedData:
+  Summary: [OrderCount, OrderDate]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch orders created on 2026-04-16",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-04-16"},
+    {"Key": "date_to", "Value": "2026-04-16"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Count orders and build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var o = Array.isArray(r.results) ? r.results : [];\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      OrderCount: o.length,\n      OrderDate: '2026-04-16'\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

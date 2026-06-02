@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate the average number of days between invoice issue date and payment date for supplier invoices"
+Approach: "Fetch all purchase invoices via purchasing_list_purchase_invoices with a broad date range (current financial year), extract those with payment dates, calculate days-to-pay per invoice in a Code step, compute the average, and return as Text Summary."
+Tools:
+  Step1: {Name: purchasing_list_purchase_invoices, Id: "1fdd3130-df10-2250-c186-1e765c14a7d2"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.date, results.paid_date, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all purchase invoices, filter to paid invoices with payment dates, calculate days-to-pay per invoice, compute average]
+Constraints: [retrieve all suppliers (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), filter to paid status only (code), exclude invoices without payment date (code), calculate days as paid_date minus date (code), zero paid invoices→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Text, Reason: "Single aggregated metric — average days to pay"}
+ExpectedData:
+  Summary: [AverageDaysToPay, InvoiceCount, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "1fdd3130-df10-2250-c186-1e765c14a7d2",
+  "ToolName": "purchasing_list_purchase_invoices",
+  "StepReason": "Fetch all purchase invoices",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate average days to pay",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        AverageDaysToPay: 0,\n        InvoiceCount: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var pd = [];\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    if (v.status === 'paid' && v.paid_date) {\n      var d1 = new Date(v.date);\n      var d2 = new Date(v.paid_date);\n      var dt = Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));\n      if (dt >= 0) {\n        pd.push(dt);\n      }\n    }\n  }\n  if (pd.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        AverageDaysToPay: 0,\n        InvoiceCount: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var tot = 0;\n  for (var j = 0; j < pd.length; j++) {\n    tot += pd[j];\n  }\n  var avg = Math.round((tot / pd.length) * 10) / 10;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      AverageDaysToPay: avg,\n      InvoiceCount: pd.length,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

@@ -1,0 +1,51 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate the average number of days from invoice issue date to payment date across all customers over the last 3 months"
+Approach: "Fetch all paid sales invoices from the last 3 months (2026-02-01 to 2026-05-01) via sales_list_sales_invoices with status=Collected, extract payment dates from the payments array in each invoice detail, calculate days-to-collect per invoice (payment_date - issue_date), compute the average across all invoices, and return as Text Summary with the metric and supporting context."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+  Step2: {Name: sales_get_sales_invoice, Id: "3b03208b-5680-f77c-27e6-6f7efee99f1f"}
+ToolAccess: {Step1: ".results", Step2: "."}
+OutputFields:
+  Step1: [results.id, results.reference]
+  Step2: [id, date, payments]
+RequiredParams:
+  Step1: {status: "[\"Collected\"]", date_from: "2026-02-01", date_to: "2026-05-01", page_size: "200"}
+  Step2: {sales_invoice_id: "$.Step1.results[0].id"}
+Pipeline: [fetch paid invoices last 3 months, retrieve full details with payment dates, calculate days-to-collect per invoice, compute average]
+Constraints: [filter: Collected status only (tool→status), date range 2026-02-01 to 2026-05-01 (tool→date_from, tool→date_to), measure from issue_date to payment_date (code), zero paid invoices→zero-state (defensive), validate payment date exists (defensive)]
+Layout: {Type: Text, Reason: "Single aggregated metric (average days) with supporting context"}
+ExpectedData:
+  Summary: [AverageDaysToCollect, InvoiceCount, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch paid invoices last 3 months",
+  "Input": [
+    {"Key": "status", "Value": "[\"Collected\"]"},
+    {"Key": "date_from", "Value": "2026-02-01"},
+    {"Key": "date_to", "Value": "2026-05-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate average days to collect",
+  "FunctionName": "calculateDSO",
+  "Function": "function calculateDSO() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        AverageDaysToCollect: 0,\n        InvoiceCount: 0,\n        PeriodFrom: '2026-02-01',\n        PeriodTo: '2026-05-01',\n        PeriodLabel: 'last 3 months'\n      },\n      Files: []\n    };\n  }\n  var dtc = [];\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    if (v.date && v.payments && Array.isArray(v.payments) && v.payments.length > 0) {\n      var pd = v.payments[0].due_date;\n      if (pd) {\n        var d1 = new Date(v.date);\n        var d2 = new Date(pd);\n        var days = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));\n        if (days >= 0) {\n          dtc.push(days);\n        }\n      }\n    }\n  }\n  if (dtc.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        AverageDaysToCollect: 0,\n        InvoiceCount: iv.length,\n        PeriodFrom: '2026-02-01',\n        PeriodTo: '2026-05-01',\n        PeriodLabel: 'last 3 months'\n      },\n      Files: []\n    };\n  }\n  var sum = 0;\n  for (var j = 0; j < dtc.length; j++) {\n    sum += dtc[j];\n  }\n  var avg = Math.round(sum / dtc.length);\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      AverageDaysToCollect: avg,\n      InvoiceCount: dtc.length,\n      PeriodFrom: '2026-02-01',\n      PeriodTo: '2026-05-01',\n      PeriodLabel: 'last 3 months'\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

@@ -1,0 +1,52 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify the top customers ranked by their payment punctuality — those who consistently pay invoices by the due date"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices with a broad date range (current financial year), then in a Code step filter to paid invoices, calculate days-to-pay for each (payment_date minus due_date), identify customers with zero or negative days-to-pay (on-time or early), rank by payment consistency (count of on-time payments), and return as BarChart+Table showing top customers by on-time payment count with supporting detail."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [id, reference, customer.id, customer.name, date, due_date, status, paid_amount, outstanding_amount, currency.code]
+RequiredParams:
+  Step1: {status: "Paid", date_from: "2025-01-01", date_to: "2026-12-31"}
+Pipeline: [fetch all paid invoices, calculate on-time payment metric per customer, rank by consistency, cap chart at 12, build output]
+Constraints: [filter: paid status only (tool→status), broad date range 2025-01-01 to 2026-12-31 (tool→date_from, tool→date_to), on-time = paid_date <= due_date (code), rank by on-time count descending (code), max 12 chart entries (code), include CustomerId for links (code), empty result→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity ranking by metric; chart shows top customers by on-time payment count, table provides detail"}
+ExpectedData:
+  Summary: [TotalCustomers, TopCustomersDisplayed, OnTimePaymentRate, Currency]
+  BarCharts:
+    - [CustomerName (X) vs OnTimePaymentCount (Y), top 12]
+  Tables:
+    - [CustomerName (linked→CustomerId), OnTimePaymentCount, TotalPayments, OnTimePercentage]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all paid invoices",
+  "Input": [
+    {"Key": "status", "Value": "Paid"},
+    {"Key": "date_from", "Value": "2025-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Rank customers by on-time payment consistency",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r && r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Top Customers by On-Time Payment', Level: 1 }],\n      Summary: { TotalCustomers: 0, TopCustomersDisplayed: 0, OnTimePaymentRate: 0, Currency: null },\n      Files: []\n    };\n  }\n  var cur = iv[0].currency.code;\n  var g = {};\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected');\n    }\n    var cid = v.customer.id;\n    var cn = v.customer.name;\n    if (!g[cid]) {\n      g[cid] = {\n        CustomerId: cid,\n        CustomerName: cn,\n        OnTimePaymentCount: 0,\n        TotalPayments: 0,\n        OnTimePercentage: 0\n      };\n    }\n    g[cid].TotalPayments += 1;\n    if (v.paid_amount > 0 && v.outstanding_amount === 0) {\n      if (v.due_date && v.date) {\n        g[cid].OnTimePaymentCount += 1;\n      }\n    }\n  }\n  var rw = [];\n  var ks = Object.keys(g);\n  for (var k = 0; k < ks.length; k++) {\n    var c = g[ks[k]];\n    if (c.TotalPayments > 0) {\n      c.OnTimePercentage = Math.round((c.OnTimePaymentCount / c.TotalPayments) * 100);\n      if (c.OnTimePaymentCount > 0) {\n        rw.push(c);\n      }\n    }\n  }\n  rw.sort(function(a, b) {\n    if (b.OnTimePaymentCount !== a.OnTimePaymentCount) {\n      return b.OnTimePaymentCount - a.OnTimePaymentCount;\n    }\n    return b.OnTimePercentage - a.OnTimePercentage;\n  });\n  if (rw.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Top Customers by On-Time Payment', Level: 1 }],\n      Summary: { TotalCustomers: 0, TopCustomersDisplayed: 0, OnTimePaymentRate: 0, Currency: cur },\n      Files: []\n    };\n  }\n  var cd = [];\n  var cl = Math.min(rw.length, 12);\n  for (var c = 0; c < cl; c++) {\n    cd.push({\n      CustomerName: rw[c].CustomerName,\n      OnTimePaymentCount: rw[c].OnTimePaymentCount\n    });\n  }\n  var td = [];\n  for (var m = 0; m < rw.length; m++) {\n    td.push({\n      CustomerId: rw[m].CustomerId,\n      CustomerName: rw[m].CustomerName,\n      OnTimePaymentCount: rw[m].OnTimePaymentCount,\n      TotalPayments: rw[m].TotalPayments,\n      OnTimePercentage: rw[m].OnTimePercentage\n    });\n  }\n  var tot = 0;\n  for (var j = 0; j < rw.length; j++) {\n    tot += rw[j].OnTimePaymentCount;\n  }\n  return {\n    BarCharts: [{\n      Title: 'Top Customers by On-Time Payment Count',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'OnTimePaymentCount',\n        YLabel: 'On-Time Payments',\n        YFormat: { Type: 'number' }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Customer On-Time Payment Details',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'On-Time Payments', Type: 'number', Data: 'OnTimePaymentCount' },\n        { Header: 'Total Payments', Type: 'number', Data: 'TotalPayments' },\n        { Header: 'On-Time %', Type: 'number', Data: 'OnTimePercentage' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Top Customers by On-Time Payment', Level: 1 }],\n    Summary: {\n      TotalCustomers: rw.length,\n      TopCustomersDisplayed: cl,\n      OnTimePaymentRate: Math.round((tot / rw.length) * 100),\n      Currency: cur\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "buildOutput",
+  "NextStep": null
+}
+</Step>
+</Response>

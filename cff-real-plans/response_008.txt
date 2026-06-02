@@ -1,0 +1,51 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Show total sales order value grouped by month"
+Approach: "Fetch all sales orders via sales_list_sales_orders with current financial year date range (2026-01-01 to 2026-12-31), group by month in Code step, sum total_amount per month, sort chronologically, cap at 24 months, render as LineChart+Table for trend visualization with supporting detail."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.id, results.customer.name, results.date, results.total_amount, results.currency.code, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all sales orders, group by month, sum amounts, build chart and table]
+Constraints: [retrieve all customers (tool→default), retrieve all statuses (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), group by month (code), sort chronologically (code), cap chart at 24 items (code), include Id and CustomerId for links (code), empty orders→zero-state (defensive), currency consistency (defensive)]
+Layout: {Type: LineChart+Table, Reason: "Time-series by month with underlying order detail; chart shows trend, table provides navigable records"}
+ExpectedData:
+  Summary: [TotalOrders, TotalOrderValue, MonthsDisplayed, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+  LineCharts:
+    - [Month (X) vs TotalOrderValue (Y), chronological, max 24]
+  Tables:
+    - [Reference (linked→Id), CustomerName (linked→CustomerId), Date, Amount, Status]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"LineChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all sales orders for current year",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Group by month, sum amounts, build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var so = Array.isArray(r.results) ? r.results : [];\n  if (so.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Sales Order Value by Month', Level: 1 }],\n      Summary: {\n        TotalOrders: 0,\n        TotalOrderValue: 0,\n        MonthsDisplayed: 0,\n        Currency: null,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = so[0].currency.code;\n  var g = {};\n  var tot = 0;\n  for (var i = 0; i < so.length; i++) {\n    var v = so[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    var m = v.date.substring(0, 7);\n    if (!g[m]) g[m] = 0;\n    g[m] += v.total_amount;\n    tot += v.total_amount;\n  }\n  var ks = Object.keys(g);\n  ks.sort();\n  var cd = [];\n  for (var j = 0; j < ks.length; j++) {\n    cd.push({\n      Month: ks[j],\n      TotalOrderValue: g[ks[j]]\n    });\n  }\n  var cl = Math.min(cd.length, 24);\n  cd = cd.slice(0, cl);\n  var td = [];\n  for (var k = 0; k < so.length; k++) {\n    var x = so[k];\n    td.push({\n      Id: x.id,\n      CustomerId: x.customer.id,\n      Reference: x.reference,\n      CustomerName: x.customer.name,\n      Date: x.date,\n      Amount: x.total_amount,\n      Status: x.status\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [{\n      Title: 'Sales Order Value by Month',\n      Series: [{\n        XKey: 'Month',\n        YKey: 'TotalOrderValue',\n        YLabel: 'Order Value',\n        YFormat: { Type: 'currency', Currency: cur }\n      }],\n      Data: cd\n    }],\n    Tables: [{\n      Title: 'Sales Order Details',\n      Columns: [\n        { Header: 'Reference', Type: 'string', Data: 'Reference', Link: { Type: 'SalesOrder', Id: 'Id' } },\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Date', Type: 'date', Data: 'Date' },\n        { Header: 'Amount', Type: 'currency', Data: 'Amount', Currency: cur },\n        { Header: 'Status', Type: 'string', Data: 'Status' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Sales Order Value by Month', Level: 1 }],\n    Summary: {\n      TotalOrders: so.length,\n      TotalOrderValue: tot,\n      MonthsDisplayed: cl,\n      Currency: cur,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

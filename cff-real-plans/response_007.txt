@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which single day had the highest number of sales orders placed"
+Approach: "Fetch all sales orders via sales_list_sales_orders with current financial year date range (default), group by order date in Code step, count orders per day, identify the day with maximum count, and return as Text summary."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.date]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all sales orders, group by date, count per day, find max]
+Constraints: [retrieve all orders (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), page_size 200 (tool→page_size), zero orders→zero-state (defensive), empty result after grouping→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single date value with supporting count"}
+ExpectedData:
+  Summary: [MostActiveDay, OrderCount, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all sales orders",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Group by date, find day with most orders",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var o = Array.isArray(r.results) ? r.results : [];\n  if (o.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        MostActiveDay: null,\n        OrderCount: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var g = {};\n  for (var i = 0; i < o.length; i++) {\n    var d = o[i].date;\n    if (!g[d]) {\n      g[d] = 0;\n    }\n    g[d] += 1;\n  }\n  var ks = Object.keys(g);\n  if (ks.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        MostActiveDay: null,\n        OrderCount: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var md = ks[0];\n  var mc = g[ks[0]];\n  for (var j = 1; j < ks.length; j++) {\n    if (g[ks[j]] > mc) {\n      md = ks[j];\n      mc = g[ks[j]];\n    }\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      MostActiveDay: md,\n      OrderCount: mc,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

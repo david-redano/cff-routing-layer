@@ -1,0 +1,48 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate what percentage of unpaid invoices (pending to pay) are overdue"
+Approach: "Fetch all unpaid purchase invoices via purchasing_list_purchase_invoices in current FY, then in a Code step filter to identify overdue items (DueDate < TodaysDate), calculate the ratio of overdue count to total unpaid count, and return as Text Summary with the percentage."
+Tools:
+  Step1: {Name: purchasing_list_purchase_invoices, Id: "1fdd3130-df10-2250-c186-1e765c14a7d2"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [id, due_date, status, overdue_days]
+RequiredParams:
+  Step1: {status: "Partially_paid", date_from: "2025-06-01", date_to: "2026-06-01"}
+Pipeline: [fetch unpaid invoices, identify overdue items, calculate percentage]
+Constraints: [filter: unpaid only via status (tool→status), date range 2025-06-01 to 2026-06-01 (tool→date_from, tool→date_to), overdue = overdue_days > 0 (code), zero unpaid→zero-state (defensive), structural validation (defensive)]
+Layout: {Type: Text, Reason: "Single percentage metric"}
+ExpectedData:
+  Summary: [OverduePercentage, OverdueCount, TotalUnpaidCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "1fdd3130-df10-2250-c186-1e765c14a7d2",
+  "ToolName": "purchasing_list_purchase_invoices",
+  "StepReason": "Fetch unpaid purchase invoices",
+  "Input": [
+    { "Key": "status", "Value": "Partially_paid" },
+    { "Key": "date_from", "Value": "2025-06-01" },
+    { "Key": "date_to", "Value": "2026-06-01" },
+    { "Key": "page_size", "Value": "200" }
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate overdue percentage",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = r.results;\n  if (!Array.isArray(iv)) {\n    throw new Error('Step1 results is not an array');\n  }\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        OverduePercentage: 0,\n        OverdueCount: 0,\n        TotalUnpaidCount: 0\n      },\n      Files: []\n    };\n  }\n  var od = 0;\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    if (v.overdue_days > 0) {\n      od += 1;\n    }\n  }\n  var pct = iv.length > 0 ? Math.round((od / iv.length) * 100 * 100) / 100 : 0;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      OverduePercentage: pct,\n      OverdueCount: od,\n      TotalUnpaidCount: iv.length\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "buildOutput",
+  "NextStep": null
+}
+</Step>
+</Response>

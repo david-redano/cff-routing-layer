@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate what percentage of total purchase invoices are being paid late"
+Approach: "Fetch all purchase invoices via purchasing_list_purchase_invoices with a broad date range (current FY), then in a Code step identify overdue invoices (due_date < TodaysDate and status unpaid), calculate the ratio of overdue count to total count, and return as Text Summary with the percentage metric."
+Tools:
+  Step1: {Name: purchasing_list_purchase_invoices, Id: "1fdd3130-df10-2250-c186-1e765c14a7d2"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.due_date, results.status, results.outstanding_amount]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all purchase invoices, identify overdue unpaid invoices, calculate late payment percentage]
+Constraints: [retrieve all invoices (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), overdue = due_date < 2026-06-01 AND outstanding_amount > 0 (code), zero invoices→zero-state (defensive), zero overdue→0% (code)]
+Layout: {Type: Text, Reason: "Single calculated percentage metric"}
+ExpectedData:
+  Summary: [LatePaymentPercentage, OverdueInvoiceCount, TotalInvoiceCount, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "1fdd3130-df10-2250-c186-1e765c14a7d2",
+  "ToolName": "purchasing_list_purchase_invoices",
+  "StepReason": "Fetch all purchase invoices",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate late payment percentage",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        LatePaymentPercentage: 0,\n        OverdueInvoiceCount: 0,\n        TotalInvoiceCount: 0,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var dt = '2026-06-01';\n  var od = 0;\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    if (v.due_date < dt && v.outstanding_amount > 0) {\n      od += 1;\n    }\n  }\n  var pct = (od / iv.length) * 100;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      LatePaymentPercentage: Math.round(pct * 100) / 100,\n      OverdueInvoiceCount: od,\n      TotalInvoiceCount: iv.length,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

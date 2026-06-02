@@ -1,0 +1,79 @@
+<Reasoning>
+Request: {Cat: Comparison, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify customers who have high invoice/order amounts but have received very few quotes"
+Approach: "Fetch all customers with their aggregated metrics (total sales amount, quote count) via analysis_aggregate_entity grouped by customer, then in a Code step filter for high-amount customers with low quote counts, rank by amount descending, cap at 12 for chart display; render as BarChart+Table to show the comparison visually with supporting detail."
+Tools:
+  Step1: {Name: analysis_aggregate_entity, Id: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"}
+  Step2: {Name: analysis_aggregate_entity, Id: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"}
+ToolAccess: {Step1: ".aggregation_result", Step2: ".aggregation_result"}
+OutputFields:
+  Step1: [aggregation_result.group.customer_id.key, aggregation_result.group.customer_id.label, aggregation_result.metric_value, aggregation_result.currency.code]
+  Step2: [aggregation_result.group.customer_id.key, aggregation_result.group.customer_id.label, aggregation_result.metric_value]
+RequiredParams:
+  Step1: {entity: "sales_invoices", metric: "total_amount", aggregation: "sum", date_field: "date", date_range_from: "2025-05-28", date_range_to: "2026-05-28", group_by: "[\"customer_id\"]", order_by_field: "metric_value", order_by_direction: "desc"}
+  Step2: {entity: "sales_quotes", metric: "total_amount", aggregation: "count", date_field: "date", date_range_from: "2025-05-28", date_range_to: "2026-05-28", group_by: "[\"customer_id\"]"}
+Pipeline: [aggregate invoice amounts by customer, aggregate quote counts by customer, merge results, filter high-amount low-quote customers, build output]
+Constraints: [retrieve all customers (tool→default), date range 2025-05-28 to 2026-05-28 (tool→date_range_from, tool→date_range_to), group by customer (tool→group_by), sort by amount desc (tool→order_by_field, tool→order_by_direction), merge two aggregations (code), filter: amount > threshold AND quote_count < threshold (code), cap chart at 12 (code), include CustomerId for links (code), zero results→zero-state (defensive), currency consistency (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity comparison with high-amount/low-quote signal; chart shows amounts, table shows detail with customer links"}
+ExpectedData:
+  Summary: [HighAmountLowQuoteCount, TotalAmount, AverageQuotesPerCustomer, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+  BarCharts:
+    - [CustomerName (X) vs TotalAmount (Y), top 12 by amount]
+  Tables:
+    - [CustomerName (linked→CustomerId), TotalAmount, QuoteCount, AmountPerQuote]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a",
+  "ToolName": "analysis_aggregate_entity",
+  "StepReason": "Aggregate invoice amounts by customer",
+  "Input": [
+    {"Key": "entity", "Value": "sales_invoices"},
+    {"Key": "metric", "Value": "total_amount"},
+    {"Key": "aggregation", "Value": "sum"},
+    {"Key": "date_field", "Value": "date"},
+    {"Key": "date_range_from", "Value": "2025-05-28"},
+    {"Key": "date_range_to", "Value": "2026-05-28"},
+    {"Key": "group_by", "Value": "[\"customer_id\"]"},
+    {"Key": "order_by_field", "Value": "metric_value"},
+    {"Key": "order_by_direction", "Value": "desc"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a",
+  "ToolName": "analysis_aggregate_entity",
+  "StepReason": "Count quotes by customer",
+  "Input": [
+    {"Key": "entity", "Value": "sales_quotes"},
+    {"Key": "metric", "Value": "total_amount"},
+    {"Key": "aggregation", "Value": "count"},
+    {"Key": "date_field", "Value": "date"},
+    {"Key": "date_range_from", "Value": "2025-05-28"},
+    {"Key": "date_range_to", "Value": "2026-05-28"},
+    {"Key": "group_by", "Value": "[\"customer_id\"]"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Merge, filter, and build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r1 = GetTaskOutput('Step1');\n  var r2 = GetTaskOutput('Step2');\n  if (!r1 || typeof r1 !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!r2 || typeof r2 !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var inv = Array.isArray(r1.aggregation_result) ? r1.aggregation_result : [];\n  var qc = Array.isArray(r2.aggregation_result) ? r2.aggregation_result : [];\n  if (inv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'High-Amount Low-Quote Customers', Level: 1 }],\n      Summary: { HighAmountLowQuoteCount: 0, TotalAmount: 0, AverageQuotesPerCustomer: 0, Currency: null, PeriodFrom: '2025-05-28', PeriodTo: '2026-05-28', PeriodLabel: null },\n      Files: []\n    };\n  }\n  var cur = inv[0].currency.code;\n  var qm = {};\n  for (var i = 0; i < qc.length; i++) {\n    var cid = qc[i].group.customer_id.key;\n    qm[cid] = qc[i].metric_value;\n  }\n  var merged = [];\n  for (var j = 0; j < inv.length; j++) {\n    var v = inv[j];\n    var cid = v.group.customer_id.key;\n    var cn = v.group.customer_id.label;\n    var amt = v.metric_value;\n    var qct = qm[cid] || 0;\n    merged.push({\n      CustomerId: cid,\n      CustomerName: cn,\n      TotalAmount: amt,\n      QuoteCount: qct,\n      AmountPerQuote: qct > 0 ? amt / qct : amt\n    });\n  }\n  var filtered = [];\n  var avgQc = 0;\n  if (merged.length > 0) {\n    var tq = 0;\n    for (var k = 0; k < merged.length; k++) { tq += merged[k].QuoteCount; }\n    avgQc = tq / merged.length;\n  }\n  var threshold = Math.max(1, Math.ceil(avgQc * 0.5));\n  for (var m = 0; m < merged.length; m++) {\n    if (merged[m].QuoteCount < threshold) {\n      filtered.push(merged[m]);\n    }\n  }\n  if (filtered.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'High-Amount Low-Quote Customers', Level: 1 }],\n      Summary: { HighAmountLowQuoteCount: 0, TotalAmount: 0, AverageQuotesPerCustomer: avgQc, Currency: cur, PeriodFrom: '2025-05-28', PeriodTo: '2026-05-28', PeriodLabel: null },\n      Files: []\n    };\n  }\n  filtered.sort(function(a, b) { return b.TotalAmount - a.TotalAmount; });\n  var tot = 0;\n  for (var n = 0; n < filtered.length; n++) { tot += filtered[n].TotalAmount; }\n  var cd = [];\n  var cl = Math.min(filtered.length, 12);\n  for (var c = 0; c < cl; c++) {\n    cd.push({ CustomerName: filtered[c].CustomerName, TotalAmount: filtered[c].TotalAmount });\n  }\n  var td = [];\n  for (var p = 0; p < filtered.length; p++) {\n    td.push({\n      CustomerId: filtered[p].CustomerId,\n      CustomerName: filtered[p].CustomerName,\n      TotalAmount: filtered[p].TotalAmount,\n      QuoteCount: filtered[p].QuoteCount,\n      AmountPerQuote: filtered[p].AmountPerQuote\n    });\n  }\n  return {\n    BarCharts: [{\n      Title: 'High-Amount Customers with Few Quotes',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'TotalAmount',\n        YLabel: 'Total Amount',\n        YFormat: { Type: 'currency', Currency: cur }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Customer Details',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Total Amount', Type: 'currency', Data: 'TotalAmount', Currency: cur },\n        { Header: 'Quote Count', Type: 'number', Data: 'QuoteCount' },\n        { Header: 'Amount per Quote', Type: 'currency', Data: 'AmountPerQuote', Currency: cur }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'High-Amount Customers with Few Quotes', Level: 1 }],\n    Summary: {\n      HighAmountLowQuoteCount: filtered.length,\n      TotalAmount: tot,\n      AverageQuotesPerCustomer: avgQc,\n      Currency: cur,\n      PeriodFrom: '2025-05-28',\n      PeriodTo: '2026-05-28',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

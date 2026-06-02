@@ -1,0 +1,62 @@
+planId: real-104
+intent: ProvideLevelPointSummaryCompany
+agentId: AccountingAgent
+displayName: Accounting Agent
+description: "Provide a high-level 3-point summary of the company's current financial health"
+capabilities:
+  - accounting-get-balance-sheet
+  - accounting-get-income-statement-es
+  - accounting-get-trial-balance
+understanding: "Provide a high-level 3-point summary of the company's current financial health"
+expectedData:
+  summary:
+    - HealthScore
+    - LiquidityRatio
+    - ProfitabilityStatus
+    - Currency
+    - AsOfDate
+defaultEntities:
+  companyId: DEMO-001
+sampleQueries:
+  - "Provide a high-level 3-point summary of the company's current financial health"
+  - "Provide a high-level 3-point summary of the company's current financial health?"
+steps:
+  - id: 1
+    action: accounting-get-balance-sheet
+    stepType: Tool
+    toolName: accounting_get_balance_sheet
+    toolId: "66edba23-cd30-c840-7cfb-057f0bda1aba"
+    stepReason: "Fetch balance sheet for asset/liability/equity position"
+    dependsOn: []
+    input:
+      - key: end_date
+        value: "2026-06-01"
+    nextStep: 2
+  - id: 2
+    action: accounting-get-income-statement-es
+    stepType: Tool
+    toolName: accounting_get_income_statement_es
+    toolId: "efcc4b47-875c-ffc0-3a17-21267e7e64b4"
+    stepReason: "Fetch income statement for revenue and profitability"
+    dependsOn: [1]
+    input:
+      - key: end_date
+        value: "2026-06-01"
+    nextStep: 3
+  - id: 3
+    action: accounting-get-trial-balance
+    stepType: Tool
+    toolName: accounting_get_trial_balance
+    toolId: "36d50511-2bd3-c1f1-27dd-6c48905dca06"
+    stepReason: "Fetch trial balance for receivables and payables detail"
+    dependsOn: [2]
+    input:
+      - key: end_date
+        value: "2026-06-01"
+    nextStep: 4
+  - id: 4
+    action: compute-calculate-financial-health-metrics-and-build-summary
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Calculate financial health metrics and build summary"
+    dependsOn: [3]

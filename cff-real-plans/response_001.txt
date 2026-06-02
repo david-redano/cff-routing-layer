@@ -1,0 +1,63 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate the percentage of customers for whom at least one sales quote has been created"
+Approach: "Fetch all customers via sales_list_customers (broadest scope, no filter), fetch all sales quotes via sales_list_sales_quotes (broadest scope, current FY default date range), then in a Code step: count unique customers with quotes, divide by total customers, multiply by 100 to get percentage. Return as Text Summary with the derived metric."
+Tools:
+  Step1: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+  Step2: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.id, results.name]
+  Step2: [results.customer.id, results.customer.name]
+RequiredParams:
+  Step1: {page_size: "200"}
+  Step2: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all customers, fetch all quotes, identify unique customers with quotes, calculate percentage]
+Constraints: [retrieve all customers (tool→default), retrieve all quotes (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), zero customers→zero-state (defensive), zero quotes→zero-state (defensive), validate customer count > 0 before division (defensive)]
+Layout: {Type: Text, Reason: "Single derived percentage metric"}
+ExpectedData:
+  Summary: [TotalCustomers, CustomersWithQuotes, QuotePercentage, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Fetch all customers",
+  "Input": [
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Calculate quote percentage by customer",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var cs = GetTaskOutput('Step1');\n  var qs = GetTaskOutput('Step2');\n  if (!cs || typeof cs !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!qs || typeof qs !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var cust = Array.isArray(cs.results) ? cs.results : [];\n  var qt = Array.isArray(qs.results) ? qs.results : [];\n  if (cust.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [],\n      Summary: {\n        TotalCustomers: 0, CustomersWithQuotes: 0, QuotePercentage: 0,\n        PeriodFrom: '2026-01-01', PeriodTo: '2026-12-31', PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  if (qt.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [],\n      Summary: {\n        TotalCustomers: cust.length, CustomersWithQuotes: 0, QuotePercentage: 0,\n        PeriodFrom: '2026-01-01', PeriodTo: '2026-12-31', PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var qc = {};\n  for (var i = 0; i < qt.length; i++) {\n    var v = qt[i];\n    if (v.customer && v.customer.id) {\n      qc[v.customer.id] = true;\n    }\n  }\n  var wq = Object.keys(qc).length;\n  var pct = (wq / cust.length) * 100;\n  return {\n    BarCharts: [], LineCharts: [], Tables: [], Headings: [],\n    Summary: {\n      TotalCustomers: cust.length,\n      CustomersWithQuotes: wq,\n      QuotePercentage: Math.round(pct * 100) / 100,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

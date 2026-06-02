@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which sales quote has the lowest total amount"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes using default 1-year date range per Specialized Rule, sort by total_amount ascending in Code step, return the single lowest-amount quote as Text Summary with quote reference and amount."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.total_amount, results.currency.code, results.customer.name]
+RequiredParams:
+  Step1: {date_from: "2025-06-01", date_to: "2026-06-01", page_size: "200"}
+Pipeline: [fetch all quotes, find minimum amount, build output]
+Constraints: [retrieve all quotes (tool→default), date range 2025-06-01 to 2026-06-01 (tool→date_from, tool→date_to), sort ascending by amount (code), select first row (code), zero quotes→zero-state (defensive), single quote returned (code)]
+Layout: {Type: Text, Reason: "Single record with lowest amount"}
+ExpectedData:
+  Summary: [QuoteReference, CustomerName, LowestAmount, Currency, QuoteCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-06-01"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Find quote with lowest amount",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        QuoteReference: null,\n        CustomerName: null,\n        LowestAmount: 0,\n        Currency: null,\n        QuoteCount: 0\n      },\n      Files: []\n    };\n  }\n  q.sort(function(a, b) { return a.total_amount - b.total_amount; });\n  var lo = q[0];\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      QuoteReference: lo.reference,\n      CustomerName: lo.customer.name,\n      LowestAmount: lo.total_amount,\n      Currency: lo.currency.code,\n      QuoteCount: q.length\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

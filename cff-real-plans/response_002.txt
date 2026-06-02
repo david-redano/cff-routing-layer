@@ -1,0 +1,51 @@
+<Reasoning>
+Request: {Cat: Aggregation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which customer has the lowest total quoted amount across all sales quotes"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes using default 1-year rolling window per Specialized Rule, group by customer in Code step, sum total_amount per customer, sort ascending to find minimum spender, cap at 12 for chart display; render as BarChart+Table for comparison with detail."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.customer.id, results.customer.name, results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2025-06-01", date_to: "2026-06-01", page_size: "200"}
+Pipeline: [fetch all quotes, group by customer, sum amounts, sort ascending, cap chart]
+Constraints: [retrieve all customers (tool→default), date range 2025-06-01 to 2026-06-01 (tool→date_from, tool→date_to), sort by amount ascending (code), max 12 bars (code), include CustomerId for links (code), empty quotes→zero-state (defensive), currency consistency (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity comparison (lowest spender); chart for visual ranking, table for detail"}
+ExpectedData:
+  Summary: [TotalCustomers, DisplayedCustomers, LowestSpender, LowestAmount, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+  BarCharts:
+    - [CustomerName (X) vs QuotedAmount (Y), ascending order, max 12]
+  Tables:
+    - [CustomerName (linked→CustomerId), QuotedAmount, QuoteCount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-06-01"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Group by customer, sort ascending, build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Which Client Spends the Least in Quotes?', Level: 1 }],\n      Summary: {\n        TotalCustomers: 0,\n        DisplayedCustomers: 0,\n        LowestSpender: null,\n        LowestAmount: 0,\n        Currency: null,\n        PeriodFrom: '2025-06-01',\n        PeriodTo: '2026-06-01',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = q[0].currency.code;\n  var g = {};\n  for (var i = 0; i < q.length; i++) {\n    var v = q[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    var x = v.customer.id;\n    var cn = v.customer.name;\n    if (!g[x]) {\n      g[x] = {\n        CustomerId: x,\n        CustomerName: cn,\n        QuotedAmount: 0,\n        QuoteCount: 0\n      };\n    }\n    g[x].QuotedAmount += v.total_amount;\n    g[x].QuoteCount += 1;\n  }\n  var rw = [];\n  var ks = Object.keys(g);\n  for (var k = 0; k < ks.length; k++) {\n    rw.push(g[ks[k]]);\n  }\n  rw.sort(function(a, b) { return a.QuotedAmount - b.QuotedAmount; });\n  if (rw.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Which Client Spends the Least in Quotes?', Level: 1 }],\n      Summary: {\n        TotalCustomers: 0,\n        DisplayedCustomers: 0,\n        LowestSpender: null,\n        LowestAmount: 0,\n        Currency: cur,\n        PeriodFrom: '2025-06-01',\n        PeriodTo: '2026-06-01',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cd = [];\n  var cl = Math.min(rw.length, 12);\n  for (var c = 0; c < cl; c++) {\n    cd.push({\n      CustomerName: rw[c].CustomerName,\n      QuotedAmount: rw[c].QuotedAmount\n    });\n  }\n  var td = [];\n  for (var m = 0; m < rw.length; m++) {\n    td.push({\n      CustomerId: rw[m].CustomerId,\n      CustomerName: rw[m].CustomerName,\n      QuotedAmount: rw[m].QuotedAmount,\n      QuoteCount: rw[m].QuoteCount\n    });\n  }\n  return {\n    BarCharts: [{\n      Title: 'Quoted Amount by Customer (Lowest to Highest)',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'QuotedAmount',\n        YLabel: 'Quoted Amount',\n        YFormat: { Type: 'currency', Currency: cur }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Customer Quote Spending Details',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Total Quoted Amount', Type: 'currency', Data: 'QuotedAmount', Currency: cur },\n        { Header: 'Quote Count', Type: 'number', Data: 'QuoteCount' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Which Client Spends the Least in Quotes?', Level: 1 }],\n    Summary: {\n      TotalCustomers: rw.length,\n      DisplayedCustomers: cl,\n      LowestSpender: rw[0].CustomerName,\n      LowestAmount: rw[0].QuotedAmount,\n      Currency: cur,\n      PeriodFrom: '2025-06-01',\n      PeriodTo: '2026-06-01',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

@@ -1,0 +1,45 @@
+planId: real-059
+intent: CalculatePercentageTotalPurchaseInvoices
+agentId: FinancialAgent
+displayName: Financial Agent
+description: "Calculate what percentage of total purchase invoices are being paid late"
+capabilities:
+  - purchasing-purchase-invoices
+understanding: "Calculate what percentage of total purchase invoices are being paid late"
+expectedData:
+  summary:
+    - LatePaymentPercentage
+    - OverdueInvoiceCount
+    - TotalInvoiceCount
+    - PeriodFrom
+    - PeriodTo
+    - PeriodLabel
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2026-01-01"
+  dateTo: "2026-12-31"
+sampleQueries:
+  - "Calculate what percentage of total purchase invoices are being paid late"
+  - "What percentage of total purchase invoices are being paid late?"
+steps:
+  - id: 1
+    action: purchasing-list-purchase-invoices
+    stepType: Tool
+    toolName: purchasing_list_purchase_invoices
+    toolId: "1fdd3130-df10-2250-c186-1e765c14a7d2"
+    stepReason: "Fetch all purchase invoices"
+    dependsOn: []
+    input:
+      - key: date_from
+        value: "2026-01-01"
+      - key: date_to
+        value: "2026-12-31"
+      - key: page_size
+        value: "200"
+    nextStep: 2
+  - id: 2
+    action: compute-calculate-late-payment-percentage
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Calculate late payment percentage"
+    dependsOn: [1]

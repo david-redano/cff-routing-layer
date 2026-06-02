@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate the average invoice amount per customer across all invoices"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices using current financial year default (2026-01-01 to 2026-12-31), group by customer in Code step, calculate average total_amount per customer, return Text summary with key metrics."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.customer.id, results.customer.name, results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all invoices for FY, group by customer, calculate average per customer, compute overall average]
+Constraints: [retrieve all customers (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), currency consistency (defensive), zero invoices→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single aggregated metric with supporting counts"}
+ExpectedData:
+  Summary: [AverageAmountPerCustomer, TotalInvoices, TotalCustomers, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all sales invoices",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate average amount per customer",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        AverageAmountPerCustomer: 0,\n        TotalInvoices: 0,\n        TotalCustomers: 0,\n        Currency: null,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = iv[0].currency.code;\n  var g = {};\n  var tot = 0;\n  for (var i = 0; i < iv.length; i++) {\n    var v = iv[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    var cid = v.customer.id;\n    if (!g[cid]) {\n      g[cid] = { count: 0, sum: 0 };\n    }\n    g[cid].count += 1;\n    g[cid].sum += v.total_amount;\n    tot += v.total_amount;\n  }\n  var ks = Object.keys(g);\n  var cs = ks.length;\n  var avg = tot / iv.length;\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      AverageAmountPerCustomer: Math.round(avg * 100) / 100,\n      TotalInvoices: iv.length,\n      TotalCustomers: cs,\n      Currency: cur,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

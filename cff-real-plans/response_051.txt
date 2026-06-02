@@ -1,0 +1,51 @@
+<Reasoning>
+Request: {Cat: Ranking, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Show all customers ranked by their quote approval percentage (highest to lowest)"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes with broadest date range (current FY), aggregate by customer in Code step to compute approval rate (Closed ÷ Total), sort descending by rate, render as BarChart+Table for visual comparison with detail breakdown."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.customer.id, results.customer.name, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all quotes, group by customer, calculate approval rate per customer, sort descending, cap chart at 12]
+Constraints: [retrieve all customers (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), group by customer (code), calculate approval rate = Closed ÷ Total (code), sort by rate descending (code), max 12 bars (code), include CustomerId for links (code), zero quotes→zero-state (defensive), structural validation (defensive)]
+Layout: {Type: BarChart+Table, Reason: "Entity ranking by metric; chart for visual comparison, table for detailed breakdown per customer"}
+ExpectedData:
+  Summary: [TotalCustomers, ChartedCustomers, HighestApprovalRate, Currency]
+  BarCharts:
+    - [CustomerName (X) vs ApprovalPercentage (Y), top 12 by rate]
+  Tables:
+    - [CustomerName (linked→CustomerId), ApprovalPercentage, TotalQuotes, ApprovedQuotes, DeclinedQuotes]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"BarChart+Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate approval rate by customer, rank, build output",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Quote Approval Rate by Customer', Level: 1 }],\n      Summary: { TotalCustomers: 0, ChartedCustomers: 0, HighestApprovalRate: 0, Currency: null },\n      Files: []\n    };\n  }\n  var g = {};\n  for (var i = 0; i < q.length; i++) {\n    var v = q[i];\n    var cid = v.customer.id;\n    var cn = v.customer.name;\n    if (!g[cid]) {\n      g[cid] = { CustomerId: cid, CustomerName: cn, Total: 0, Approved: 0, Declined: 0 };\n    }\n    g[cid].Total += 1;\n    if (v.status === 'Closed') {\n      g[cid].Approved += 1;\n    } else if (v.status === 'Declined') {\n      g[cid].Declined += 1;\n    }\n  }\n  var rw = [];\n  var ks = Object.keys(g);\n  for (var j = 0; j < ks.length; j++) {\n    var k = ks[j];\n    var rate = g[k].Total > 0 ? Math.round((g[k].Approved / g[k].Total) * 100) : 0;\n    rw.push({\n      CustomerId: g[k].CustomerId,\n      CustomerName: g[k].CustomerName,\n      ApprovalPercentage: rate,\n      TotalQuotes: g[k].Total,\n      ApprovedQuotes: g[k].Approved,\n      DeclinedQuotes: g[k].Declined\n    });\n  }\n  rw.sort(function(a, b) { return b.ApprovalPercentage - a.ApprovalPercentage; });\n  var maxRate = rw.length > 0 ? rw[0].ApprovalPercentage : 0;\n  var cd = [];\n  var cl = Math.min(rw.length, 12);\n  for (var c = 0; c < cl; c++) {\n    cd.push({\n      CustomerName: rw[c].CustomerName,\n      ApprovalPercentage: rw[c].ApprovalPercentage\n    });\n  }\n  var td = [];\n  for (var m = 0; m < rw.length; m++) {\n    td.push({\n      CustomerId: rw[m].CustomerId,\n      CustomerName: rw[m].CustomerName,\n      ApprovalPercentage: rw[m].ApprovalPercentage,\n      TotalQuotes: rw[m].TotalQuotes,\n      ApprovedQuotes: rw[m].ApprovedQuotes,\n      DeclinedQuotes: rw[m].DeclinedQuotes\n    });\n  }\n  return {\n    BarCharts: [{\n      Title: 'Quote Approval Rate by Customer',\n      Series: [{\n        XKey: 'CustomerName',\n        YKey: 'ApprovalPercentage',\n        YLabel: 'Approval Rate (%)',\n        YFormat: { Type: 'percentage' }\n      }],\n      Data: cd\n    }],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Customer Quote Approval Details',\n      Columns: [\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Approval Rate (%)', Type: 'number', Data: 'ApprovalPercentage' },\n        { Header: 'Total Quotes', Type: 'number', Data: 'TotalQuotes' },\n        { Header: 'Approved', Type: 'number', Data: 'ApprovedQuotes' },\n        { Header: 'Declined', Type: 'number', Data: 'DeclinedQuotes' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Quote Approval Rate by Customer', Level: 1 }],\n    Summary: {\n      TotalCustomers: rw.length,\n      ChartedCustomers: cd.length,\n      HighestApprovalRate: maxRate,\n      Currency: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

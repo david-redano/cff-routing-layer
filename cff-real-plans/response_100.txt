@@ -1,0 +1,65 @@
+<Reasoning>
+Request: {Cat: Comparison, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Compare the total amount of sales quotes issued in the current period to the same period last year"
+Approach: "Fetch quotes for current YTD (2026-01-01 to 2026-06-01) and prior-year equivalent (2025-01-01 to 2025-06-01) via two sales_list_sales_quotes calls, sum total_amount per period in Code step, calculate year-over-year comparison, and return as Text summary with comparison metrics."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+  Step2: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results", Step2: ".results"}
+OutputFields:
+  Step1: [results.total_amount, results.currency.code]
+  Step2: [results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-06-01", page_size: "200"}
+  Step2: {date_from: "2025-01-01", date_to: "2025-06-01", page_size: "200"}
+Pipeline: [fetch current-year quotes, fetch prior-year quotes, compare totals, calculate variance]
+Constraints: [retrieve all quotes (tool→default), date range 2026-01-01 to 2026-06-01 for current period (tool→date_from, tool→date_to), date range 2025-01-01 to 2025-06-01 for prior period (tool→date_from, tool→date_to), currency consistency within each period (defensive), zero quotes in either period→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Year-over-year comparison with single metric values"}
+ExpectedData:
+  Summary: [CurrentPeriodAmount, PriorPeriodAmount, ChangeAmount, ChangePercent, Direction, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch quotes for current period YTD",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch quotes for prior-year same period",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-01-01"},
+    {"Key": "date_to", "Value": "2025-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Code",
+  "StepReason": "Compare quote amounts year-over-year",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r1 = GetTaskOutput('Step1');\n  var r2 = GetTaskOutput('Step2');\n  if (!r1 || typeof r1 !== 'object') { throw new Error('Step1 returned invalid output'); }\n  if (!r2 || typeof r2 !== 'object') { throw new Error('Step2 returned invalid output'); }\n  var q1 = Array.isArray(r1.results) ? r1.results : [];\n  var q2 = Array.isArray(r2.results) ? r2.results : [];\n  var t1 = 0, t2 = 0, cur = null;\n  if (q1.length > 0) {\n    cur = q1[0].currency.code;\n    for (var i = 0; i < q1.length; i++) {\n      if (q1[i].currency.code !== cur) { throw new Error('Mixed currencies in current period'); }\n      t1 += q1[i].total_amount;\n    }\n  }\n  if (q2.length > 0) {\n    var c2 = q2[0].currency.code;\n    if (cur && c2 !== cur) { throw new Error('Mixed currencies across periods'); }\n    if (!cur) { cur = c2; }\n    for (var j = 0; j < q2.length; j++) {\n      if (q2[j].currency.code !== c2) { throw new Error('Mixed currencies in prior period'); }\n      t2 += q2[j].total_amount;\n    }\n  }\n  if (q1.length === 0 && q2.length === 0) {\n    return {\n      BarCharts: [], LineCharts: [], Tables: [], Headings: [],\n      Summary: {\n        CurrentPeriodAmount: 0, PriorPeriodAmount: 0, ChangeAmount: 0, ChangePercent: 0,\n        Direction: null, Currency: null,\n        PeriodFrom: '2026-01-01', PeriodTo: '2026-06-01', PeriodLabel: 'same period last year'\n      },\n      Files: []\n    };\n  }\n  var chg = t1 - t2;\n  var pct = t2 !== 0 ? ((chg / t2) * 100) : 0;\n  var dir = chg > 0 ? 'up' : (chg < 0 ? 'down' : 'flat');\n  return {\n    BarCharts: [], LineCharts: [], Tables: [], Headings: [],\n    Summary: {\n      CurrentPeriodAmount: t1, PriorPeriodAmount: t2, ChangeAmount: chg, ChangePercent: pct,\n      Direction: dir, Currency: cur,\n      PeriodFrom: '2026-01-01', PeriodTo: '2026-06-01', PeriodLabel: 'same period last year'\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

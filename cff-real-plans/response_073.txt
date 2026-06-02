@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Calculation, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Calculate the ratio of Pending to Closed sales invoices"
+Approach: "Fetch all sales invoices via sales_list_sales_invoices with broad date range (current financial year), filter by status in Code step to separate Pending and Closed counts, calculate ratio, return as Text Summary."
+Tools:
+  Step1: {Name: sales_list_sales_invoices, Id: "f5fc423c-2544-084c-56df-09d849ac1737"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-01-01", date_to: "2026-12-31", page_size: "200"}
+Pipeline: [fetch all sales invoices, count by status, calculate ratio]
+Constraints: [retrieve all invoices (tool→default), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), filter Pending and Closed statuses (code), zero invoices→zero-state (defensive), handle division by zero (defensive)]
+Layout: {Type: Text, Reason: "Single ratio metric with supporting counts"}
+ExpectedData:
+  Summary: [PendingCount, ClosedCount, Ratio, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f5fc423c-2544-084c-56df-09d849ac1737",
+  "ToolName": "sales_list_sales_invoices",
+  "StepReason": "Fetch all sales invoices",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Calculate Pending vs Closed ratio",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var iv = Array.isArray(r.results) ? r.results : [];\n  if (iv.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        PendingCount: 0,\n        ClosedCount: 0,\n        Ratio: null,\n        PeriodFrom: '2026-01-01',\n        PeriodTo: '2026-12-31',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var pc = 0;\n  var cc = 0;\n  for (var i = 0; i < iv.length; i++) {\n    var s = iv[i].status;\n    if (s === 'Pending') {\n      pc += 1;\n    } else if (s === 'Closed') {\n      cc += 1;\n    }\n  }\n  var ratio = cc > 0 ? (pc / cc).toFixed(2) : (pc > 0 ? 'Infinity' : '0.00');\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      PendingCount: pc,\n      ClosedCount: cc,\n      Ratio: ratio,\n      PeriodFrom: '2026-01-01',\n      PeriodTo: '2026-12-31',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

@@ -1,0 +1,77 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "List all sales orders for the customer Bonarea Energia Sl"
+Approach: "Search for customer 'Bonarea Energia Sl' via sales_list_customers to obtain the customer ID, validate a single match in a Code step, then fetch all sales orders for that customer via sales_list_sales_orders using a broad date range (current financial year), and return as a Table with order details."
+Tools:
+  Step1: {Name: sales_list_customers, Id: "de798796-6a20-ce1a-f686-dc224799debc"}
+  Step3: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results", Step3: ".results"}
+OutputFields:
+  Step1: [results.id, results.name]
+  Step3: [results.id, results.reference, results.date, results.status, results.total_amount, results.currency.code]
+RequiredParams:
+  Step1: {query: "Bonarea Energia Sl"}
+  Step3: {customer_id: "$.Step2.CustomerId", date_from: "2026-01-01", date_to: "2026-12-31"}
+Pipeline: [search customer by name, validate single match, fetch all orders for customer, build table output]
+Constraints: [validate single customer match (code), retrieve all orders for customer (tool→customer_id), date range 2026-01-01 to 2026-12-31 (tool→date_from, tool→date_to), include Id for order links (code), zero orders→zero-state (defensive), structural validation on GetTaskOutput (defensive)]
+Layout: {Type: Table, Reason: "Multiple order records to display without grouping signal"}
+ExpectedData:
+  Summary: [CustomerName, OrderCount, TotalOrderValue, Currency]
+  Tables:
+    - [Reference (linked→Id), Date, Status, Amount]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "de798796-6a20-ce1a-f686-dc224799debc",
+  "ToolName": "sales_list_customers",
+  "StepReason": "Search for customer Bonarea Energia Sl",
+  "Input": [
+    {"Key": "query", "Value": "Bonarea Energia Sl"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Validate single customer match",
+  "Function": "function validateCustomer() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var cs = r.results;\n  if (!Array.isArray(cs)) {\n    throw new Error('Step1 results is not an array');\n  }\n  if (cs.length === 0) {\n    AbortPlan('No customer found matching Bonarea Energia Sl');\n  }\n  if (cs.length > 1) {\n    AbortPlan('Multiple customers found matching Bonarea Energia Sl. Please specify further.');\n  }\n  return { CustomerId: cs[0].id, CustomerName: cs[0].name };\n}",
+  "FunctionName": "validateCustomer",
+  "NextStep": 3
+}
+</Step>
+<Step>
+{
+  "Id": 3,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch all orders for customer",
+  "Input": [
+    {"Key": "customer_id", "Value": "$.Step2.CustomerId"},
+    {"Key": "date_from", "Value": "2026-01-01"},
+    {"Key": "date_to", "Value": "2026-12-31"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 4
+}
+</Step>
+<Step>
+{
+  "Id": 4,
+  "Type": "Code",
+  "StepReason": "Build table output with order details",
+  "Function": "function buildOutput() {\n  var c = GetTaskOutput('Step2');\n  var r = GetTaskOutput('Step3');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step3 returned invalid output');\n  }\n  var oo = r.results;\n  if (!Array.isArray(oo)) {\n    throw new Error('Step3 results is not an array');\n  }\n  if (oo.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Sales Orders for ' + c.CustomerName, Level: 1 }],\n      Summary: {\n        CustomerName: c.CustomerName,\n        OrderCount: 0,\n        TotalOrderValue: 0,\n        Currency: null\n      },\n      Files: []\n    };\n  }\n  var cur = oo[0].currency.code;\n  var tot = 0;\n  var td = [];\n  for (var i = 0; i < oo.length; i++) {\n    var v = oo[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    tot += v.total_amount;\n    td.push({\n      Id: v.id,\n      Reference: v.reference,\n      Date: v.date,\n      Status: v.status,\n      TotalAmount: v.total_amount\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Sales Orders for ' + c.CustomerName,\n      Columns: [\n        { Header: 'Order Reference', Type: 'string', Data: 'Reference', Link: { Type: 'SalesOrder', Id: 'Id' } },\n        { Header: 'Date', Type: 'date', Data: 'Date' },\n        { Header: 'Status', Type: 'string', Data: 'Status' },\n        { Header: 'Total Amount', Type: 'currency', Data: 'TotalAmount', Currency: cur }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Sales Orders for ' + c.CustomerName, Level: 1 }],\n    Summary: {\n      CustomerName: c.CustomerName,\n      OrderCount: oo.length,\n      TotalOrderValue: tot,\n      Currency: cur\n    },\n    Files: []\n  };\n}",
+  "FunctionName": "buildOutput",
+  "NextStep": null
+}
+</Step>
+</Response>

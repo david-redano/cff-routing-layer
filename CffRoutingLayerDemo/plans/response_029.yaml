@@ -1,0 +1,65 @@
+planId: real-029
+intent: RetrieveCompleteDetailsSalesOrder
+agentId: SalesAgent
+displayName: Sales Agent
+description: "Retrieve complete details for sales order number 0003"
+capabilities:
+  - sales-orders
+  - sales-get-order
+understanding: "Retrieve complete details for sales order number 0003"
+expectedData:
+  summary:
+    - OrderReference
+    - CustomerName
+    - OrderDate
+    - Status
+    - TotalAmount
+    - Currency
+    - LineItemCount
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2025-06-01"
+  dateTo: "2026-06-01"
+sampleQueries:
+  - "Retrieve complete details for sales order number 0003"
+  - "Complete details for sales order number 0003?"
+steps:
+  - id: 1
+    action: sales-list-sales-orders
+    stepType: Tool
+    toolName: sales_list_sales_orders
+    toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
+    stepReason: "Search for sales order 0003"
+    dependsOn: []
+    input:
+      - key: date_from
+        value: "2025-06-01"
+      - key: date_to
+        value: "2026-06-01"
+      - key: page_size
+        value: "200"
+    nextStep: 2
+  - id: 2
+    action: compute-validate-single-order-match-by-reference
+    stepType: Code
+    functionName: validateOrder
+    stepReason: "Validate single order match by reference"
+    dependsOn: [1]
+    nextStep: 3
+  - id: 3
+    action: sales-get-sales-order
+    stepType: Tool
+    toolName: sales_get_sales_order
+    toolId: "bb53c0b2-0434-0479-4f19-6756b0002ab3"
+    stepReason: "Fetch complete sales order details"
+    dependsOn: [2]
+    input:
+      - key: sales_order_id
+        value: "$.Step2.OrderId"
+    nextStep: 4
+  - id: 4
+    action: compute-build-order-details-table-output
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Build order details table output"
+    dependsOn: [3]

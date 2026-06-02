@@ -1,0 +1,49 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Find all sales orders created on 16 April 2026"
+Approach: "Fetch sales orders via sales_list_sales_orders with date_from and date_to both set to 2026-04-16 (single day), return as Table listing all matching orders with key details."
+Tools:
+  Step1: {Name: sales_list_sales_orders, Id: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.customer.id, results.customer.name, results.date, results.total_amount, results.currency.code, results.status]
+RequiredParams:
+  Step1: {date_from: "2026-04-16", date_to: "2026-04-16", page_size: "200"}
+Pipeline: [fetch orders created on 2026-04-16, build table output]
+Constraints: [date range 2026-04-16 to 2026-04-16 (tool→date_from, tool→date_to), retrieve all orders for date (tool→default), zero orders→zero-state (defensive), include CustomerId for links (code)]
+Layout: {Type: Table, Reason: "Multiple order records to display"}
+ExpectedData:
+  Summary: [OrderCount, TotalValue, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+  Tables:
+    - [Reference (linked→Id), CustomerName (linked→CustomerId), Date, Amount, Status]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Table"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "38de4b32-92d4-de8f-4d9b-40d61c39b7c6",
+  "ToolName": "sales_list_sales_orders",
+  "StepReason": "Fetch orders created on 16 April 2026",
+  "Input": [
+    {"Key": "date_from", "Value": "2026-04-16"},
+    {"Key": "date_to", "Value": "2026-04-16"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Build table output with order details",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var o = Array.isArray(r.results) ? r.results : [];\n  if (o.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [{ Text: 'Orders Created on 16 April 2026', Level: 1 }],\n      Summary: {\n        OrderCount: 0,\n        TotalValue: 0,\n        Currency: null,\n        PeriodFrom: '2026-04-16',\n        PeriodTo: '2026-04-16',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var cur = o[0].currency.code;\n  var tot = 0;\n  var td = [];\n  for (var i = 0; i < o.length; i++) {\n    var v = o[i];\n    if (v.currency.code !== cur) {\n      throw new Error('Mixed currencies detected: cannot aggregate');\n    }\n    tot += v.total_amount;\n    td.push({\n      Id: v.id,\n      CustomerId: v.customer.id,\n      Reference: v.reference,\n      CustomerName: v.customer.name,\n      Date: v.date,\n      TotalAmount: v.total_amount,\n      Status: v.status\n    });\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [{\n      Title: 'Orders Created on 16 April 2026',\n      Columns: [\n        { Header: 'Order Reference', Type: 'string', Data: 'Reference', Link: { Type: 'SalesOrder', Id: 'Id' } },\n        { Header: 'Customer', Type: 'string', Data: 'CustomerName', Link: { Type: 'Customer', Id: 'CustomerId' } },\n        { Header: 'Date', Type: 'date', Data: 'Date' },\n        { Header: 'Total Amount', Type: 'currency', Data: 'TotalAmount', Currency: cur },\n        { Header: 'Status', Type: 'string', Data: 'Status' }\n      ],\n      Data: td\n    }],\n    Headings: [{ Text: 'Orders Created on 16 April 2026', Level: 1 }],\n    Summary: {\n      OrderCount: o.length,\n      TotalValue: tot,\n      Currency: cur,\n      PeriodFrom: '2026-04-16',\n      PeriodTo: '2026-04-16',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>

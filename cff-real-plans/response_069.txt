@@ -1,0 +1,47 @@
+<Reasoning>
+Request: {Cat: Retrieval, Scope: true, Feasible: "true", Action: BuildPlan}
+Understanding: "Identify which sales quote has the highest total monetary amount"
+Approach: "Fetch all sales quotes via sales_list_sales_quotes using default 1-year rolling window per Specialized Rule, find the maximum total_amount in a Code step, return Text summary with quote details."
+Tools:
+  Step1: {Name: sales_list_sales_quotes, Id: "f67362e0-4705-ab74-b046-eb8a28347b80"}
+ToolAccess: {Step1: ".results"}
+OutputFields:
+  Step1: [results.id, results.reference, results.date, results.total_amount, results.currency.code, results.customer.name]
+RequiredParams:
+  Step1: {date_from: "2025-06-01", date_to: "2026-06-01", page_size: "200"}
+Pipeline: [fetch all quotes, find max amount, build output]
+Constraints: [retrieve all quotes (tool→default), date range 2025-06-01 to 2026-06-01 (tool→date_from, tool→date_to), page_size 200 (tool→page_size), find single max (code), zero quotes→zero-state (defensive)]
+Layout: {Type: Text, Reason: "Single record with highest amount"}
+ExpectedData:
+  Summary: [QuoteReference, CustomerName, QuoteAmount, Currency, PeriodFrom, PeriodTo, PeriodLabel]
+Checks: [tool-id-name-match, required-params-complete, constraint-enforcement, output-fields-traced, schema-paths-valid, dates-resolved, layout-aligned, period-fields-included]
+</Reasoning>
+
+<Response>
+<Meta>{"Type":"Plan","Layout":"Text"}</Meta>
+<Step>
+{
+  "Id": 1,
+  "Type": "Tool",
+  "ToolId": "f67362e0-4705-ab74-b046-eb8a28347b80",
+  "ToolName": "sales_list_sales_quotes",
+  "StepReason": "Fetch all sales quotes",
+  "Input": [
+    {"Key": "date_from", "Value": "2025-06-01"},
+    {"Key": "date_to", "Value": "2026-06-01"},
+    {"Key": "page_size", "Value": "200"}
+  ],
+  "NextStep": 2
+}
+</Step>
+<Step>
+{
+  "Id": 2,
+  "Type": "Code",
+  "StepReason": "Find quote with highest amount",
+  "FunctionName": "buildOutput",
+  "Function": "function buildOutput() {\n  var r = GetTaskOutput('Step1');\n  if (!r || typeof r !== 'object') {\n    throw new Error('Step1 returned invalid output');\n  }\n  var q = Array.isArray(r.results) ? r.results : [];\n  if (q.length === 0) {\n    return {\n      BarCharts: [],\n      LineCharts: [],\n      Tables: [],\n      Headings: [],\n      Summary: {\n        QuoteReference: null,\n        CustomerName: null,\n        QuoteAmount: 0,\n        Currency: null,\n        PeriodFrom: '2025-06-01',\n        PeriodTo: '2026-06-01',\n        PeriodLabel: null\n      },\n      Files: []\n    };\n  }\n  var mx = q[0];\n  for (var i = 1; i < q.length; i++) {\n    if (q[i].total_amount > mx.total_amount) {\n      mx = q[i];\n    }\n  }\n  return {\n    BarCharts: [],\n    LineCharts: [],\n    Tables: [],\n    Headings: [],\n    Summary: {\n      QuoteReference: mx.reference,\n      CustomerName: mx.customer.name,\n      QuoteAmount: mx.total_amount,\n      Currency: mx.currency.code,\n      PeriodFrom: '2025-06-01',\n      PeriodTo: '2026-06-01',\n      PeriodLabel: null\n    },\n    Files: []\n  };\n}",
+  "NextStep": null
+}
+</Step>
+</Response>
