@@ -6,7 +6,7 @@ description: "Analyse profit anomalies using statistical z-score detection"
 capabilities:
   - profit-audit
   - anomaly-detection
-understanding: "Detect and analyse profit anomaly or unusual profit movements using statistical z-score methods"
+understanding: "analyze profit anomaly for ${customer} ${period}"
 expectedData:
   summary:
     - AnomalyCount

@@ -14,14 +14,18 @@ public sealed class BedrockDisambiguator : IDisambiguator
     private readonly BedrockLlmHelper _llm;
 
     private const string SystemPrompt = """
-        You are an intent selector for a financial accounting assistant.
+        You are an intent selector for a business operations assistant covering
+        sales, invoicing, accounting, finance, and financial reporting.
         Given a user message and a numbered list of candidate intents (each with a description
-        of what that intent does), decide which candidate the user is requesting.
+        of what that intent does), decide which candidate best matches what the user is asking.
 
         Rules:
-        1. Select a candidate ONLY when the user message CLEARLY asks for that exact action.
-        2. If the message is vague, about something not in the list, or only loosely related
-           (e.g. "create a customer" when the candidate is "create an invoice"), respond: none
+        1. Select the candidate whose description is semantically equivalent to, or a
+           reasonable interpretation of, the user message — even if the wording differs.
+           Example: "which period had better sales" → candidate "Compare total sales order amounts
+           for a given period" is a valid match.
+        2. Respond: none ONLY when no candidate plausibly addresses what the user is asking
+           (e.g. "write me a poem" when all candidates are financial operations).
         3. Respond with ONLY the exact intent name from the list, or the single word: none
         4. No explanation, no punctuation, no prose — one token answer only.
         """;

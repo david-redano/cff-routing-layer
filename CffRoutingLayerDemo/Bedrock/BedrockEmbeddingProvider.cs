@@ -68,6 +68,30 @@ public sealed class BedrockEmbeddingProvider : IDisposable
 
     // ── Public API ────────────────────────────────────────────────────────
 
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Replaces common typographic non-ASCII characters with ASCII equivalents
+    /// and strips any remaining non-ASCII bytes. This prevents the AWS SDK from
+    /// raising <see cref="System.Net.Http.HttpRequestException"/> when non-ASCII
+    /// characters end up in request headers during SigV4 signing.
+    /// </summary>
+    private static string SanitizeForBedrock(string text)
+    {
+        // Typographic dashes → ASCII hyphen-minus
+        text = text
+            .Replace('\u2014', '-')   // em dash  —
+            .Replace('\u2013', '-')   // en dash  –
+            .Replace('\u2012', '-');  // figure dash ‒
+
+        // Strip any remaining non-ASCII characters
+        var sb = new System.Text.StringBuilder(text.Length);
+        foreach (var ch in text)
+            if (ch <= '\x7F') sb.Append(ch);
+
+        return sb.ToString();
+    }
+
     /// <summary>
     /// Returns the embedding for <paramref name="text"/>.
     /// Checks the local file cache first; calls Bedrock only on a miss,
@@ -75,7 +99,10 @@ public sealed class BedrockEmbeddingProvider : IDisposable
     /// </summary>
     public async Task<float[]> EmbedAsync(string text, CancellationToken ct = default)
     {
-        // Cache hit — no API call needed
+        // Normalise to ASCII before using as cache key or sending to Bedrock.
+        // Non-ASCII chars (e.g. em dash —) in plan understanding texts can
+        // cause the AWS SDK to raise HttpRequestException from HTTP header validation.
+        text = SanitizeForBedrock(text);
         if (_localCache.TryGetValue(text, out var cached))
             return cached;
 

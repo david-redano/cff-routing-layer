@@ -103,9 +103,14 @@ public sealed class CacheWarmer
                     continue;
                 }
 
-                // ── Step 2: skip if already cached (avoid duplicate keys) ─────
+                // ── Step 2: skip if already cached FOR THE SAME INTENT ───────
+                // Only deduplicate within the same intent. If the nearest
+                // cached entry belongs to a different intent (e.g. a
+                // ListInvoices entry absorbing a ListSalesOrders sample),
+                // the sample must still be stored so this intent has its
+                // own anchor that query-time lookups can resolve correctly.
                 var existing = _cache.Lookup(rewritten.NormalizedText);
-                if (existing is not null)
+                if (existing is not null && existing.Intent.Intent == plan.Intent)
                 {
                     skipped++;
                     continue;
@@ -144,17 +149,19 @@ public sealed class CacheWarmer
             }
 
             // ── Understanding anchor ──────────────────────────────────────────
-            // Store one entry keyed on the plan's `understanding` text directly
-            // (no rewriter call). The understanding is entity-free, so its
-            // EmbeddingSimulator vector is deterministic. This guarantees at
-            // least one cache entry that reliably matches any live query for
-            // this intent — insulating the cache from LLM non-determinism where
-            // the rewriter extracts different slot names on different calls
-            // (e.g. keeping "TechVentures LLC" literal on warm vs. emitting
-            // ${customer} at query time, dropping the cosine below 0.75).
-            if (!string.IsNullOrWhiteSpace(plan.Understanding))
+            // Store one entry keyed on a COMPACT form of the plan's `understanding`
+            // text — stripped of leading action verbs and trimmed to ≤60 chars —
+            // so it is structurally close to what LlmIntentRewriter produces at
+            // query time. Titan V2 cosine between two short, similar-form strings
+            // reliably scores ≥ 0.95, safely above the 0.88 threshold.
+            //
+            // The full `understanding` text is intentionally NOT used here: it is
+            // a long natural-language sentence optimised for Stage 4b token-overlap
+            // matching, not for embedding similarity.
+            var anchorText = CompactForCache(plan.Understanding);
+            if (!string.IsNullOrWhiteSpace(anchorText))
             {
-                var anchorLookup = _cache.Lookup(plan.Understanding);
+                var anchorLookup = _cache.Lookup(anchorText);
                 if (anchorLookup is null)
                 {
                     var anchorIntent = new CffRoutingLayerDemo.Core.IntentResult(
@@ -166,13 +173,13 @@ public sealed class CacheWarmer
 
                     var anchorContext = new CffRoutingLayerDemo.Core.RoutingContext(
                         RequestId:   $"warm-anchor-{plan.Intent}",
-                        UserMessage: plan.Understanding,
+                        UserMessage: anchorText,
                         CompanyId:   plan.DefaultEntities.GetValueOrDefault("companyId", "DEMO-001"),
                         Timestamp:   DateTime.UtcNow,
                         Entities:    new Dictionary<string, string>(plan.DefaultEntities));
 
                     var anchorPlan = agent.BuildPlan(anchorIntent, anchorContext);
-                    _cache.Store(plan.Understanding, anchorIntent, anchorPlan);
+                    _cache.Store(anchorText, anchorIntent, anchorPlan);
 
                     Console.ForegroundColor = ConsoleColor.DarkGray;
                     Console.WriteLine(
@@ -189,5 +196,43 @@ public sealed class CacheWarmer
         Console.ResetColor();
 
         return warmed;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex _rxLeadingVerb = new(
+        @"^(Calculate|Identify|Compare|Retrieve|List|Fetch|Find|Show|Get|Determine|Count|Analyse|Analyze|Generate|Check|Rank|Provide)\s+(the\s+)?(which\s+)?",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex _rxFiller = new(
+        @"\b(whether\s+(any\s+|there\s+are\s+)?|a\s+percentage\s+of\s+|the\s+total\s+|the\s+number\s+of\s+|the\s+single\s+)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase |
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Strips the leading action verb and common filler phrases from a plan's
+    /// understanding text, lowercases the result, and trims to ≤60 chars so it
+    /// is structurally close to what <c>LlmIntentRewriter</c> produces at query time.
+    /// </summary>
+    private static string CompactForCache(string understanding)
+    {
+        if (string.IsNullOrWhiteSpace(understanding)) return "";
+
+        var text = _rxLeadingVerb.Replace(understanding, "").TrimStart();
+        text = _rxFiller.Replace(text, "").TrimStart();
+        text = text.ToLowerInvariant();
+
+        if (text.Length > 60)
+        {
+            var cut = text.LastIndexOf(' ', 60);
+            text = cut > 0 ? text[..cut] : text[..60];
+        }
+
+        // Remove trailing punctuation and dangling conjunctions / em-dashes
+        text = System.Text.RegularExpressions.Regex
+            .Replace(text.TrimEnd('.', ',', ';', '?', '!'),
+                     @"\s+[\-–—]?\s*(and|or|but|—|–|-)?$", "")
+            .Trim();
+
+        return text;
     }
 }

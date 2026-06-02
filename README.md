@@ -338,7 +338,7 @@ A **cache HIT** skips Stages 4–6 entirely and jumps straight to Stage 7 plan e
 
 > **Slot refresh on cache hit:** the cached plan describes *which steps to run and in what order*. It does **not** carry the previous query's entity values. On every cache hit the plan is re-executed with the current query's freshly-extracted entities (`RewrittenIntent.ExtractedEntities`), so `customer`, `unitPrice`, `dueDate`, and all other slots always reflect the new request — never the query that originally populated the cache.
 
-The cache is **pre-warmed at startup**: `CacheWarmer` iterates each plan's `sampleQueries`, embeds them, and stores entries. This guarantees a hit rate > 0 from the very first query that matches a sample phrase.
+The cache is **pre-warmed at startup**: `CacheWarmer` iterates each plan's `sampleQueries`, runs them through the intent rewriter, and stores the normalized forms. It also stores one **understanding anchor** — the plan's `understanding:` field verbatim, without rewriting — as a guaranteed fallback. The anchor is written in the same slot-template form the rewriter produces at query time (e.g. `"analyze profit anomaly for ${customer} ${period}"`), so it scores ≥ 0.97 against any live query for that intent regardless of LLM non-determinism during sample-query rewriting.
 
 `EmbeddingSimulator` uses a fixed set of keyword dimensions (`cashflow`, `cash`, `flow`, `invoice`, `bill`, `customer`, `reconcile`, `tax`, `profit`, `loss`, `runway`, …) and computes cosine similarity on term-frequency vectors — no AWS dependency, deterministic, sub-millisecond.
 

@@ -55,6 +55,11 @@ public sealed class BedrockLlmHelper : IDisposable
         float temperature = 0f,
         CancellationToken ct = default)
     {
+        // Sanitize non-ASCII characters (e.g. em dash — from generated plan texts)
+        // before they reach the AWS SDK — the SDK can raise HttpRequestException
+        // when non-ASCII bytes end up in request headers during SigV4 signing.
+        userMessage = SanitizeForBedrock(userMessage);
+
         var request = new ConverseRequest
         {
             ModelId = _modelId,
@@ -81,4 +86,23 @@ public sealed class BedrockLlmHelper : IDisposable
     }
 
     public void Dispose() => _client.Dispose();
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Replaces common typographic non-ASCII characters with ASCII equivalents
+    /// and strips any remaining non-ASCII bytes.
+    /// </summary>
+    private static string SanitizeForBedrock(string text)
+    {
+        text = text
+            .Replace('\u2014', '-')   // em dash  —
+            .Replace('\u2013', '-')   // en dash  –
+            .Replace('\u2012', '-');  // figure dash ‒
+
+        var sb = new System.Text.StringBuilder(text.Length);
+        foreach (var ch in text)
+            if (ch <= '\x7F') sb.Append(ch);
+        return sb.ToString();
+    }
 }
