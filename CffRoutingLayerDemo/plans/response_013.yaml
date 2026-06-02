@@ -1,0 +1,59 @@
+planId: real-013
+intent: IdentifyCustomersPlacedSalesOrders
+agentId: SalesAgent
+displayName: Sales Agent
+description: "Identify which customers have not placed any sales orders within the last 30 days"
+capabilities:
+  - sales-orders
+  - sales-customers
+understanding: "Identify which customers have not placed any sales orders within the ${period}"
+expectedData:
+  summary:
+    - TotalActiveCustomers
+    - InactiveCustomerCount
+    - Currency
+    - PeriodFrom
+    - PeriodTo
+    - PeriodLabel
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2026-05-02"
+  dateTo: "2026-06-01"
+sampleQueries:
+  - "Identify which customers have not placed any sales orders within the ${period}"
+  - "Customers have not placed any sales orders within the ${period}?"
+steps:
+  - id: 1
+    action: sales-list-sales-orders
+    stepType: Tool
+    toolName: sales_list_sales_orders
+    toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
+    stepReason: "Fetch orders from last 30 days"
+    dependsOn: []
+    input:
+      - key: date_from
+        value: "2026-05-02"
+      - key: date_to
+        value: "2026-06-01"
+      - key: page_size
+        value: "200"
+    nextStep: 2
+  - id: 2
+    action: sales-list-customers
+    stepType: Tool
+    toolName: sales_list_customers
+    toolId: "de798796-6a20-ce1a-f686-dc224799debc"
+    stepReason: "Fetch all active customers"
+    dependsOn: [1]
+    input:
+      - key: is_active
+        value: "true"
+      - key: page_size
+        value: "200"
+    nextStep: 3
+  - id: 3
+    action: compute-identify-customers-without-recent-orders
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Identify customers without recent orders"
+    dependsOn: [2]

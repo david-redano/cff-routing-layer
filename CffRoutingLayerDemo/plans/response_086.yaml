@@ -1,0 +1,51 @@
+planId: real-086
+intent: IdentifyCustomerQuotesQuotes
+agentId: AnalysisAgent
+displayName: Analysis Agent
+description: "Identify which customer has the highest number of quotes and which has the lowest number of quotes"
+capabilities:
+  - analysis-aggregation
+understanding: "Identify which customer has the highest number of quotes and which has the lowest number of quotes"
+expectedData:
+  summary:
+    - TopCustomer
+    - TopCustomerQuoteCount
+    - BottomCustomer
+    - BottomCustomerQuoteCount
+    - TotalCustomers
+    - TotalQuotes
+defaultEntities:
+  companyId: DEMO-001
+sampleQueries:
+  - "Identify which customer has the highest number of quotes and which has the lowest number of quotes"
+  - "Customer has the highest number of quotes and which has the lowest number of?"
+steps:
+  - id: 1
+    action: analysis-aggregate-entity
+    stepType: Tool
+    toolName: analysis_aggregate_entity
+    toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
+    stepReason: "Aggregate quote count by customer"
+    dependsOn: []
+    input:
+      - key: entity
+        value: "sales_quotes"
+      - key: metric
+        value: "count"
+      - key: aggregation
+        value: "count"
+      - key: date_field
+        value: "date"
+      - key: group_by
+        value: "[\"customer_id\"]"
+      - key: order_by_field
+        value: "metric_value"
+      - key: order_by_direction
+        value: "desc"
+    nextStep: 2
+  - id: 2
+    action: compute-build-comparison-output-with-top-and-bottom
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Build comparison output with top and bottom"
+    dependsOn: [1]

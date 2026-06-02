@@ -10,6 +10,7 @@ An intent-driven **agent routing layer** for accounting and finance workflows, b
   - [Table of Contents](#table-of-contents)
   - [Overview](#overview)
   - [Solution Structure](#solution-structure)
+  - [Plan Transformation: CffPlanTransformer](#plan-transformation-cffplantransformer)
   - [Seven-Stage Routing Pipeline](#seven-stage-routing-pipeline)
     - [Stage 1 — Guardrails](#stage-1--guardrails)
     - [Stage 2 — Intent Rewriter](#stage-2--intent-rewriter)
@@ -95,9 +96,10 @@ cff-routing-layer/
 │   ├── .env / .env.template                  # Runtime configuration
 │   │
 │   ├── Bedrock/
-│   │   ├── BedrockDisambiguator.cs       # Claude Haiku Stage 4c LLM confirmation (USE_BEDROCK_DISAMBIGUATOR)
+│   │   ├── BedrockDisambiguator.cs           # Claude Haiku Stage 4c LLM confirmation (USE_BEDROCK_DISAMBIGUATOR)
 │   │   ├── BedrockEmbeddingProvider.cs       # Titan Embeddings V2 + local disk cache
 │   │   ├── BedrockLlmClassifier.cs           # Claude Haiku intent classifier
+│   │   ├── BedrockLlmHelper.cs               # Shared ConverseAsync wrapper (single/multi system-block overloads)
 │   │   ├── BedrockSemanticCache.cs           # Bedrock-backed semantic cache
 │   │   ├── BedrockStreamingConversation.cs   # Streaming fallback for Unknown intents
 │   │   ├── CanonicalPhrases.cs               # Intent ↔ AgentId map (loaded from plans)
@@ -175,11 +177,125 @@ cff-routing-layer/
 ├── CffRoutingLayerDemo.Tests/                # xUnit test suite (48 tests)
 │   └── UnitTest1.cs
 │
-└── CffRoutingLayerDemo.Benchmarks/           # BenchmarkDotNet micro-benchmarks
-    ├── CacheWarmerBenchmarks.cs
-    ├── MultiIntentBenchmarks.cs
+├── CffRoutingLayerDemo.Benchmarks/           # BenchmarkDotNet micro-benchmarks
+│   ├── CacheWarmerBenchmarks.cs
+│   ├── MultiIntentBenchmarks.cs
 │   ├── RewriterBenchmarks.cs                 # Loads queries from rewriter_benchmarks.yaml; regex vs LLM comparison
-    └── RoutingPipelineBenchmarks.cs
+│   └── RoutingPipelineBenchmarks.cs
+│
+├── CffPlanTransformer/                       # Developer tool: converts real plan .txt files → routing-demo YAML
+│   ├── CffPlanTransformer.csproj
+│   ├── Program.cs                            # CLI entry point (single-file and batch modes)
+│   ├── Parser/
+│   │   └── RealPlanParser.cs                 # Parses <Reasoning> + <Response> blocks from copilot plan files
+│   └── Transformer/
+│       └── PlanTransformer.cs                # Maps RealPlan → YAML string with normalization + dedup fingerprint
+│
+├── cff-real-plans/                           # Source: raw copilot plan .txt files (response_001.txt … response_112.txt)
+└── cff-real-plans-yaml/                      # Output: generated routing-demo YAML files (105 unique plans)
+```
+
+---
+
+## Plan Transformation: CffPlanTransformer
+
+`CffPlanTransformer` is a standalone console tool that converts raw Copilot plan `.txt` exports into the routing-demo YAML format consumed by `PlanLoader` and `AgentRegistry`. It is not part of the runtime routing pipeline — it is run once per batch of new plan files to regenerate `cff-real-plans-yaml/`.
+
+### Input format
+
+Each source file contains two structured blocks:
+
+```
+<Reasoning>
+Understanding: Identify which customers have not placed any sales orders within the last 30 days
+Tools:
+  - Name: sales_list_sales_orders
+  - Name: sales_list_customers
+Required parameters: …
+Summary fields: CustomerName, TotalOrders
+</Reasoning>
+
+<Response>
+[
+  { "StepId": 1, "Type": "Tool", "ToolName": "sales_list_sales_orders",
+    "Input": { "StartDate": "2026-04-01", "EndDate": "2026-04-30" },
+    "StepReason": "Fetch sales orders for period", "NextStep": 2 },
+  { "StepId": 2, "Type": "Tool", "ToolName": "sales_list_customers",
+    "Input": { "FilterBy": "no-orders" }, "NextStep": null }
+]
+</Response>
+```
+
+The `<Reasoning>` block is parsed as YAML-like key-value pairs. The `<Response>` block is parsed as JSON; function-body strings (inline JavaScript) are stripped before parsing to avoid unterminated-string errors.
+
+### Transformation pipeline
+
+```
+.txt source file
+      │
+      ▼
+  RealPlanParser                   Parse <Reasoning> and <Response> blocks
+      │ RealPlan { Understanding, Tools, Steps, SummaryFields }
+      ▼
+  PlanTransformer.Transform()
+      ├─ GenerateIntent()           PascalCase from Understanding (stop-word filtered, max 5 words)
+      ├─ DeriveAgentId()            Domain prefix of majority tool (sales→SalesAgent, etc.)
+      ├─ DeriveCapabilities()       Tool name → hyphenated capability slug (deduped)
+      ├─ NormalizeUnderstanding()   Replace concrete slot values with ${slot} placeholders
+      ├─ ComputeDependsOn()         Invert NextStep chain → DependsOn arrays
+      └─ ExtractDateRange()         Pull dateFrom/dateTo from first Tool step inputs
+      │
+      ▼
+  YAML string  →  response_NNN.yaml
+```
+
+### Understanding normalization
+
+Before writing the `understanding:` and `sampleQueries:` fields, `NormalizeUnderstanding()` replaces concrete runtime values with typed `${slot}` placeholders. This makes embeddings generalize across parameter variations so that, for example, `"last 30 days"` and `"last 200 days"` produce nearly identical vectors.
+
+| Slot | Pattern matched | Example → normalized |
+|---|---|---|
+| `${period}` | Relative windows | `last 30 days`, `last 200 days`, `last year`, `Q1 2024` → `last ${period}` |
+| `${period}` | Named-month ranges | `between March and April`, `in March`, `from March to June` → `${period}` |
+| `${date}` | Natural-language dates | `January 15`, `16 April`, `April 16, 2024` → `${date}` |
+| `${date}` | ISO dates | `2024-03-15` → `${date}` |
+| `${year}` | Bare / fiscal years | `2024`, `FY2025` → `${year}` |
+| `${amount}` | Multi-currency amounts | `$1,500`, `€1,000`, `£500`, `$1.5M` → `${amount}` |
+| `${customer}` | Names after context keywords | `for customer TechCorp Solutions`, `belonging to Acme Corp` → `for customer ${customer}` |
+| `${orderId}` / `${invoiceId}` / `${quoteId}` | Alphanumeric reference codes | `sales order number 0003` → `sales order ${orderId}` |
+| `${itemDescription}` | Products after "ordered … most/frequently" | `ordered iPhones most frequently` → `ordered ${itemDescription} most frequently` |
+
+The `description:` field always retains the original human-readable text. Only `understanding:` and `sampleQueries:` receive normalized values.
+
+### Deduplication
+
+Before writing each output file, `GetFingerprint(plan)` computes a structural key:
+
+```
+<normalized Understanding text> | stepType:toolName/funcName:sortedInputKeyNames (per step)
+```
+
+Parameter *values* are excluded from the fingerprint, so two plans whose only difference is a concrete date range (e.g. `StartDate: 2026-01-01` vs `StartDate: 2026-04-01`) are treated as duplicates and only the first is written. This prevents embedding the same plan logic under many slightly different understood texts.
+
+Of the 112 source files, **105 unique plans** are written; 7 structural duplicates are skipped.
+
+### Usage
+
+```bash
+# Single file
+dotnet run --project CffPlanTransformer -- <input.txt> [output.yaml]
+
+# Batch — process all .txt files in a directory
+dotnet run --project CffPlanTransformer -- --all cff-real-plans cff-real-plans-yaml
+```
+
+Batch output:
+```
+[OK]   response_013.yaml
+[OK]   response_014.yaml
+[SKIP] response_107 — same understanding + structure as an earlier plan (intent: 'ProvideL...')
+…
+Done: 105 written, 7 skipped (duplicate), 0 failed, 112 total.
 ```
 
 ---
@@ -517,7 +633,7 @@ steps:                            # DAG of execution steps
 | Claude 3 Haiku | `anthropic.claude-3-haiku-20240307-v1:0` | Intent classification, intent rewriting, RAG report generation, conversation compaction, streaming fallback |
 | Titan Embeddings V2 | `amazon.titan-embed-text-v2:0` | Semantic cache embeddings (1536-dim, normalised cosine) |
 
-All Claude calls use the **Converse API** (`ConverseAsync`). Titan embeddings use `InvokeModelAsync` with a JSON payload. Temporary session credentials (access key + secret + session token) are fully supported via `.env`.
+All Claude calls use the **Converse API** (`ConverseAsync`) via the shared `BedrockLlmHelper` wrapper, which owns a single `AmazonBedrockRuntimeClient` instance reused by `BedrockLlmClassifier`, `LlmIntentRewriter`, and `BedrockDisambiguator`. `BedrockLlmHelper` exposes two overloads — one for a single system prompt block, one for multiple blocks (used by `LlmIntentRewriter` which sends both a static rules block and a live runtime-context block). Titan embeddings use `InvokeModelAsync` with a JSON payload directly in `BedrockEmbeddingProvider`. Temporary session credentials (access key + secret + session token) are fully supported via `.env`.
 
 **Embedding disk cache:** on every new embedding, `BedrockEmbeddingProvider` persists the vector to `embeddings_cache.json` in the output directory. On the next startup, all previously embedded strings are served from disk with zero Bedrock calls.
 

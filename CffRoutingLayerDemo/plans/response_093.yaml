@@ -1,0 +1,45 @@
+planId: real-093
+intent: IdentifyCustomerReceivedSalesQuote
+agentId: SalesAgent
+displayName: Sales Agent
+description: "Identify which customer received the highest-value sales quote and report that quote amount"
+capabilities:
+  - sales-quotes
+understanding: "Identify which customer received the highest-value sales quote and report that quote amount"
+expectedData:
+  summary:
+    - CustomerName
+    - HighestQuoteAmount
+    - Currency
+    - PeriodFrom
+    - PeriodTo
+    - PeriodLabel
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2026-04-01"
+  dateTo: "2027-03-31"
+sampleQueries:
+  - "Identify which customer received the highest-value sales quote and report that quote amount"
+  - "Customer received the highest-value sales quote and report that quote amount?"
+steps:
+  - id: 1
+    action: sales-list-sales-quotes
+    stepType: Tool
+    toolName: sales_list_sales_quotes
+    toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
+    stepReason: "Fetch all sales quotes"
+    dependsOn: []
+    input:
+      - key: date_from
+        value: "2026-04-01"
+      - key: date_to
+        value: "2027-03-31"
+      - key: page_size
+        value: "200"
+    nextStep: 2
+  - id: 2
+    action: compute-find-highest-value-quote-and-extract-details
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Find highest-value quote and extract details"
+    dependsOn: [1]

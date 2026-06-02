@@ -142,6 +142,46 @@ public sealed class CacheWarmer
 
                 warmed++;
             }
+
+            // ── Understanding anchor ──────────────────────────────────────────
+            // Store one entry keyed on the plan's `understanding` text directly
+            // (no rewriter call). The understanding is entity-free, so its
+            // EmbeddingSimulator vector is deterministic. This guarantees at
+            // least one cache entry that reliably matches any live query for
+            // this intent — insulating the cache from LLM non-determinism where
+            // the rewriter extracts different slot names on different calls
+            // (e.g. keeping "TechVentures LLC" literal on warm vs. emitting
+            // ${customer} at query time, dropping the cosine below 0.75).
+            if (!string.IsNullOrWhiteSpace(plan.Understanding))
+            {
+                var anchorLookup = _cache.Lookup(plan.Understanding);
+                if (anchorLookup is null)
+                {
+                    var anchorIntent = new CffRoutingLayerDemo.Core.IntentResult(
+                        Intent:               plan.Intent,
+                        Confidence:           1.0,
+                        Entities:             new Dictionary<string, string>(plan.DefaultEntities),
+                        AgentId:              plan.AgentId,
+                        RequiresConfirmation: false);
+
+                    var anchorContext = new CffRoutingLayerDemo.Core.RoutingContext(
+                        RequestId:   $"warm-anchor-{plan.Intent}",
+                        UserMessage: plan.Understanding,
+                        CompanyId:   plan.DefaultEntities.GetValueOrDefault("companyId", "DEMO-001"),
+                        Timestamp:   DateTime.UtcNow,
+                        Entities:    new Dictionary<string, string>(plan.DefaultEntities));
+
+                    var anchorPlan = agent.BuildPlan(anchorIntent, anchorContext);
+                    _cache.Store(plan.Understanding, anchorIntent, anchorPlan);
+
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine(
+                        $"  [Cache warmer] ✓ [{plan.Intent,-28}] (understanding anchor)");
+                    Console.ResetColor();
+
+                    warmed++;
+                }
+            }
         }
 
         Console.ForegroundColor = ConsoleColor.DarkGray;

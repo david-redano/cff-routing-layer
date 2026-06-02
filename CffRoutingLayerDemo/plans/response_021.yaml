@@ -1,0 +1,45 @@
+planId: real-021
+intent: IdentifySalesOrderTotalMonetary
+agentId: SalesAgent
+displayName: Sales Agent
+description: "Identify which sales order has the highest total monetary amount"
+capabilities:
+  - sales-orders
+understanding: "Identify which sales order has the highest total monetary amount"
+expectedData:
+  summary:
+    - OrderReference
+    - CustomerName
+    - TotalAmount
+    - Currency
+    - OrderDate
+    - Status
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2026-01-01"
+  dateTo: "2026-12-31"
+sampleQueries:
+  - "Identify which sales order has the highest total monetary amount"
+  - "Sales order has the highest total monetary amount?"
+steps:
+  - id: 1
+    action: sales-list-sales-orders
+    stepType: Tool
+    toolName: sales_list_sales_orders
+    toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
+    stepReason: "Fetch all sales orders"
+    dependsOn: []
+    input:
+      - key: date_from
+        value: "2026-01-01"
+      - key: date_to
+        value: "2026-12-31"
+      - key: page_size
+        value: "200"
+    nextStep: 2
+  - id: 2
+    action: compute-find-order-with-highest-total-amount
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Find order with highest total amount"
+    dependsOn: [1]

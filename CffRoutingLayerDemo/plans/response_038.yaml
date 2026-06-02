@@ -1,0 +1,45 @@
+planId: real-038
+intent: CheckSalesQuotesQuarterIdentify
+agentId: SalesAgent
+displayName: Sales Agent
+description: "Check all sales quotes from the last quarter to identify any gaps in the quote numbering sequence"
+capabilities:
+  - sales-quotes
+understanding: "Check all sales quotes from the ${period} to identify any gaps in the quote numbering sequence"
+expectedData:
+  summary:
+    - TotalQuotes
+    - GapsFound
+    - MissingNumbers
+    - PeriodFrom
+    - PeriodTo
+    - PeriodLabel
+defaultEntities:
+  companyId: DEMO-001
+  dateFrom: "2026-01-01"
+  dateTo: "2026-03-31"
+sampleQueries:
+  - "Check all sales quotes from the ${period} to identify any gaps in the quote numbering sequence"
+  - "Check all sales quotes from the ${period} to identify any gaps in the quote?"
+steps:
+  - id: 1
+    action: sales-list-sales-quotes
+    stepType: Tool
+    toolName: sales_list_sales_quotes
+    toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
+    stepReason: "Fetch all quotes for last quarter"
+    dependsOn: []
+    input:
+      - key: date_from
+        value: "2026-01-01"
+      - key: date_to
+        value: "2026-03-31"
+      - key: page_size
+        value: "200"
+    nextStep: 2
+  - id: 2
+    action: compute-detect-gaps-in-quote-numbering-sequence
+    stepType: Code
+    functionName: detectGaps
+    stepReason: "Detect gaps in quote numbering sequence"
+    dependsOn: [1]

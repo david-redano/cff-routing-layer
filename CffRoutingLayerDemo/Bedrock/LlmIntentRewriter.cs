@@ -75,14 +75,17 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
              capture the value including the % or $ sign.
 
         2. Surface normalisation (no entity capture — just rename):
-           - P&L / pnl / profit & loss → "profit and loss"
-             IMPORTANT: "profit anomaly", "profit anomalies", or any phrase containing "anomaly"
-             must NEVER be changed to "profit and loss". Only exact abbreviations
-             (P&L, pnl, p & l) or the phrase "profit & loss" trigger this rule.
+           - P&L / pnl / profit & loss / p & l → "profit and loss"
+             IMPORTANT: this rule fires ONLY for the exact abbreviations above.
+             Do NOT paraphrase or rephrase ANY other profit-related phrase as "profit and loss".
+             The words "anomaly", "anomalies", "spike", "unusual", "detect", "flag", "zscore",
+             "z-score" are ANOMALY-DETECTION vocabulary — they must ALWAYS be preserved verbatim
+             in normalizedText. Rewriting them to "and loss" or any P&L synonym is FORBIDDEN.
            - A/R / accounts receivable → "accounts receivable"
            - A/P / accounts payable → "accounts payable"
            - recon / reconciliation → "reconcile"
            - bill / billing → "invoice"
+           - anomalies / anomalous → "anomaly"
 
         3. Coreference resolution using conversation context:
            - "same account" / "that account" → resolve to accountId from history

@@ -6,7 +6,7 @@ description: "Analyse profit anomalies using statistical z-score detection"
 capabilities:
   - profit-audit
   - anomaly-detection
-understanding: "Detect and analyse profit anomalies or unusual profit movements using statistical z-score methods"
+understanding: "Detect and analyse profit anomaly or unusual profit movements using statistical z-score methods"
 expectedData:
   summary:
     - AnomalyCount
@@ -20,6 +20,7 @@ sampleQueries:
   - "Why did our profit spike last March?"
   - "Flag unusual profit movements for this year"
   - "Detect revenue anomalies in Q2"
+  - "detect a profit anomaly"
 steps:
   - id: 1
     action: fetch-profit-series

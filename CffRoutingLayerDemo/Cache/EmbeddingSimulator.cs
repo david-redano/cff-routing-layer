@@ -17,7 +17,7 @@ public sealed class EmbeddingSimulator
         "profit", "loss", "revenue", "expense", "income", "ebit",
         "report", "summary", "forecast", "budget",
         "balance", "account", "transaction", "payment", "vendor",
-        "runway", "burn", "sustain", "anomaly", "drop", "decline"
+        "runway", "burn", "sustain", "anomal", "drop", "decline"
     ];
 
     public double[] Embed(string text)

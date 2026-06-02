@@ -10,7 +10,7 @@ public sealed record RewrittenIntent(
     string OriginalText,
     string NormalizedText,
     IReadOnlyDictionary<string, string> ExtractedEntities,
-    IReadOnlyList<string> Capabilities = null
+    IReadOnlyList<string>? Capabilities = null
 )
 {
     /// <summary>Merge with entities extracted by the classifier (classifier wins on conflict).</summary>

@@ -162,6 +162,8 @@ internal sealed class IntentRewriterEngine
             "reconcile"),
         (new Regex(@"\bbill(?:ing)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
             "invoice"),
+        (new Regex(@"\banomal(?:ies|ous)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+            "anomaly"),
     ];
 
     // ── Public API ────────────────────────────────────────────────────────
