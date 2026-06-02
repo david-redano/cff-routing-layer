@@ -55,8 +55,23 @@ internal sealed class IntentRewriterEngine
         @"(?:\$)?(\d+(?:\.\d{2})?)\s+(?:each|apiece|per\s+unit|per\s+item)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Combined items + price: "400 bikes, 400 each" / "5 hours 150 per unit" (no "at" separator)
+    private static readonly Regex _itemsAndPricePattern = new(
+        @"\b(\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)?),?\s+(\d+(?:\.\d{2})?)\s+(?:each|apiece|per\s+unit|per\s+item)\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex _dueDatePattern = new(
         @"\bdue\s+(?:date\s+)?in\s+(\d+\s+(?:days?|weeks?|months?))\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Specific-date due dates: "due (date/data) (on/by/coming) DATE"
+    // Handles typo "due data" and formats: "7th June", "June 7th", "YYYY-MM-DD", "MM/DD"
+    private static readonly Regex _specificDueDatePattern = new(
+        @"\bdue\s+(?:dat[ae]\s+)?(?:on\s+|by\s+|coming\s+)?(" +
+        @"\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)(?:\s+\d{4})?|" +
+        @"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:\s+\d{4})?|" +
+        @"\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?|" +
+        @"\d{4}[/\-]\d{2}[/\-]\d{2})",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Matches "10% off", "15% discount", "10 percent off", "$50 off"
@@ -167,6 +182,22 @@ internal sealed class IntentRewriterEngine
             text = _invoiceItemPattern.Replace(text, "${quantity} ${itemDescription} at ${unitPrice}");
         }
 
+        // Step 0a-bis: combined "N items, PRICE each" — no "at" separator
+        // Runs after the "at PRICE" pattern and before the standalone suffix so it handles
+        // phrases like "400 bikes, 400 each" or "5 hours 150 per unit".
+        if (!entities.ContainsKey("unitPrice"))
+        {
+            var comboMatch = _itemsAndPricePattern.Match(text);
+            if (comboMatch.Success)
+            {
+                entities["quantity"]        = comboMatch.Groups[1].Value;
+                entities["itemDescription"] = comboMatch.Groups[2].Value;
+                entities["unitPrice"]       = comboMatch.Groups[3].Value;
+                text = _itemsAndPricePattern.Replace(text,
+                    "${quantity} ${itemDescription} at ${unitPrice}");
+            }
+        }
+
         // Step 0a′: standalone unit-price suffix "N each", "N per unit", "N apiece", "$N each"
         // Runs after the "at PRICE" pattern so it only fires when no "at" form was found.
         if (!entities.ContainsKey("unitPrice"))
@@ -179,12 +210,25 @@ internal sealed class IntentRewriterEngine
             }
         }
 
-        // Step 0b: pre-process due-date pattern "due date in N days" / "due in N weeks"
+        // Step 0b: pre-process relative due-date "due date in N days" / "due in N weeks"
         var dueMatch = _dueDatePattern.Match(text);
         if (dueMatch.Success)
         {
             entities["dueDate"] = dueMatch.Groups[1].Value;
             text = _dueDatePattern.Replace(text, "due ${dueDate}");
+        }
+
+        // Step 0b-specific: specific-date due dates
+        // Handles typo "due data", "due date coming 7th June", "due on June 7th", ISO dates.
+        // Must run BEFORE PiiRules so the month name is not consumed as ${period}.
+        if (!entities.ContainsKey("dueDate"))
+        {
+            var specDueMatch = _specificDueDatePattern.Match(text);
+            if (specDueMatch.Success)
+            {
+                entities["dueDate"] = specDueMatch.Groups[1].Value.Trim();
+                text = _specificDueDatePattern.Replace(text, "due ${dueDate}");
+            }
         }
 
         // Step 0c: pre-process discount — "10% off", "$50 off"

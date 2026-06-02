@@ -13,6 +13,8 @@ expectedData:
     - InvoiceCount
     - TotalAmount
     - Currency
+defaultEntities:
+  companyId: DEMO-001
 sampleQueries:
   - "list my invoices"
   - "show all invoices for last month"

@@ -48,9 +48,18 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
              any entity (customer, amount, unitPrice, quantity, dueDate, etc.), ALWAYS use the
              current message value. Only resolve from history when the current message contains
              NO explicit value for that entity.
-           - Due dates (e.g. "due date in 7 days", "due in 2 weeks", "due next Friday") → ${dueDate}
+           - Due dates → ${dueDate}. Recognised forms (note: "due data" is a common typo for "due date"):
+               • Relative:  "due in 7 days", "due date in 2 weeks", "due next Friday"
+               • Specific:  "due 7th June", "due on June 7th", "due date coming 7th June",
+                            "due 2026-06-07", "due 06/07/2026"
+               • With typo: "due data coming 7th June" → dueDate: "7th June"
              IMPORTANT: use ${dueDate} for invoice due dates, NEVER ${period}. ${period} is ONLY for
              financial reporting windows (last month, Q2 2024, YTD, etc.).
+             IMPORTANT: do NOT capture abstract nouns as dueDate. Words like "deadline", "expiry",
+             "due date" (the phrase alone), "close to deadline", "near expiry" are status filter
+             phrases — they carry no concrete date value and must NOT be captured as ${dueDate}.
+             Only capture dueDate when the message states an actual date, day count, or named
+             relative period (e.g. "in 7 days", "next Friday", "7th June").
            - Calendar periods (this month, last 30 days, Q2 2024, January, YTD) → ${period}
            - 4-digit fiscal years (2024, 2025) → ${year}
            - Legal entity types (LLC, S-Corp, C-Corp, sole proprietor) → ${entityType}
@@ -91,27 +100,22 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
 
         5. If nothing needs changing, return the original message as normalizedText.
         6. Omit any entity key where the value is empty or unknown.
+        7. CRITICAL — entity values are ALWAYS the actual text extracted from the user message.
+           NEVER put a ${slotName} placeholder as an entity value. The ${...} syntax belongs ONLY
+           in normalizedText. If you replaced "marc" with ${customer} in normalizedText, the
+           entities object must contain "customer": "marc" — not "customer": "${customer}".
 
-                Response format (JSON only):
+                Response format (JSON only — include ONLY slots that have a real value):
                 {
-                    "normalizedText": "...",
+                    "normalizedText": "i want to create an invoice for ${customer} for ${quantity} ${itemDescription} at ${unitPrice}, due ${dueDate}",
                     "entities": {
-                        "customer": "",
-                        "accountId": "",
-                        "amount": "",
-                        "period": "",
-                        "year": "",
-                        "entityType": "",
-                        "quantity": "",
-                        "unitPrice": "",
-                        "itemDescription": "",
-                        "dueDate": "",
-                        "paymentTerms": "",
-                        "taxRate": "",
-                        "paymentMethod": "",
-                        "discount": ""
+                        "customer": "Marc",
+                        "quantity": "4",
+                        "itemDescription": "bikes",
+                        "unitPrice": "200",
+                        "dueDate": "7 days"
                     },
-                    "capabilities": ["profit-loss", "reporting"] // array of keywords or features relevant to the user request
+                    "capabilities": ["invoicing"] // array of keywords or features relevant to the user request
                 }
         """;
 
@@ -176,7 +180,7 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
             ],
             InferenceConfig = new InferenceConfiguration
             {
-                MaxTokens   = 350,
+                MaxTokens   = 500,
                 Temperature = 0f   // deterministic
             }
         };
@@ -185,7 +189,24 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
         {
             var response = await _client.ConverseAsync(request, ct);
             var json     = response.Output.Message.Content[0].Text.Trim();
-            return ParseJson(rawText, json);
+            var result   = ParseJson(rawText, json);
+
+            // Regex fallback: if the LLM extracted no entity slots (e.g. unusual format
+            // like "400 bikes, 400 each" or "due data coming 7th June"), fall back to the
+            // local regex engine as a safety net so slots are never silently lost.
+            if (result.ExtractedEntities.Count == 0)
+            {
+                var regex = new IntentRewriterEngine().Rewrite(rawText);
+                if (regex.ExtractedEntities.Count > 0)
+                    return new RewrittenIntent(
+                        result.OriginalText,
+                        // Prefer LLM normalized text when it actually changed something
+                        result.NormalizedText != rawText ? result.NormalizedText : regex.NormalizedText,
+                        regex.ExtractedEntities,
+                        result.Capabilities);
+            }
+
+            return result;
         }
         catch (OperationCanceledException)
         {
@@ -239,7 +260,11 @@ public sealed class LlmIntentRewriter : IIntentRewriter, IDisposable
                 foreach (var prop in ents.EnumerateObject())
                 {
                     var val = prop.Value.GetString();
-                    if (!string.IsNullOrWhiteSpace(val))
+                    // Reject values that are still placeholder tokens (e.g. "${dueDate}").
+                    // The LLM occasionally echoes the normalizedText placeholder instead of
+                    // the real extracted value; treating these as absent is safer.
+                    if (!string.IsNullOrWhiteSpace(val)
+                        && !(val.StartsWith("${", StringComparison.Ordinal) && val.EndsWith("}")))
                         entities[prop.Name] = val;
                 }
 

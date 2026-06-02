@@ -15,8 +15,6 @@ expectedData:
     - TaxAmount
     - Status
 defaultEntities:
-  customer: TechVentures LLC
-  amount: "$4,500"
   companyId: DEMO-001
 sampleQueries:
   - "Create an invoice for TechVentures LLC for $4,500"

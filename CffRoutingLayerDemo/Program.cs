@@ -46,12 +46,15 @@ IIntentRewriter rewriter = config.UseLlmRewriter
     ? new LlmIntentRewriter(config)
     : new RegexIntentRewriter();
 
-var registry  = AgentRegistry.LoadFromPlans(plansDir);
-var dataStore = new CompanyDataStore();
+var registry      = AgentRegistry.LoadFromPlans(plansDir);
+var dataStore     = new CompanyDataStore();
 RagSummarizer? ragSummarizer = config.UseBedrockRag ? new RagSummarizer(config) : null;
-var executor  = new PlanExecutor(dataStore, ragSummarizer);
-var stats     = new SessionStats();
-var engine    = new RoutingEngine(cache, classifier, registry, executor, rewriter, stats);
+var executor      = new PlanExecutor(dataStore, ragSummarizer);
+var stats         = new SessionStats();
+IDisambiguator? disambiguator = config.UseBedrockDisambiguator
+    ? new BedrockDisambiguator(config)
+    : null;
+var engine        = new RoutingEngine(cache, classifier, registry, executor, rewriter, stats, disambiguator);
 
 // Streaming fallback (used for Unknown intents)
 var streaming = new BedrockStreamingConversation(config);

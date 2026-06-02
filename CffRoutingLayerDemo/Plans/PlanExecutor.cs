@@ -59,7 +59,7 @@ public sealed class PlanExecutor
         var entities  = context.Entities ?? new Dictionary<string, string>();
         var period    = entities.GetValueOrDefault("period",
                             plan.Steps.FirstOrDefault()?.Input.GetValueOrDefault("period")
-                            ?? "last month");
+                            ?? "");
         var companyId = context.CompanyId;
 
         ExecutionData data;
@@ -522,7 +522,12 @@ public sealed class PlanExecutor
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"Plan: {plan.PlanId}  |  Intent: {plan.Intent}");
-        sb.AppendLine($"Company: {context.CompanyId}  |  Period: {period}");
+        if (!string.IsNullOrEmpty(period))
+            sb.AppendLine($"Company: {context.CompanyId}  |  Period: {period}");
+        else if (entities.TryGetValue("dueDate", out var dueDate) && !string.IsNullOrEmpty(dueDate))
+            sb.AppendLine($"Company: {context.CompanyId}  |  Due: {dueDate}");
+        else
+            sb.AppendLine($"Company: {context.CompanyId}");
         sb.AppendLine($"Data: {data.Records.Count} transaction(s) retrieved from store");
         sb.AppendLine(new string('─', 60));
 

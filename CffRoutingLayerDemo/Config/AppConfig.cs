@@ -52,8 +52,14 @@ public sealed class AppConfig
     /// </summary>
     public bool UseBedrockClassifier { get; init; } = false;
 
-    /// <summary>
-    /// When true, final plan-report steps call Claude via <see cref="CffRoutingLayerDemo.Bedrock.RagSummarizer"/>
+    /// <summary>    /// When true, an LLM disambiguation call (Stage 4c) runs after the Stage 4b
+    /// fallback matcher to confirm or reject low-confidence candidate intents.
+    /// Uses the same model as the classifier; max_tokens=20 (one-token answer).
+    /// Default: false (safe for local runs without AWS credentials).
+    /// </summary>
+    public bool UseBedrockDisambiguator { get; init; } = false;
+
+    /// <summary>    /// When true, final plan-report steps call Claude via <see cref="CffRoutingLayerDemo.Bedrock.RagSummarizer"/>
     /// to narrate the retrieved financial data (RAG loop).
     /// When false, a local formatter generates the report without a Bedrock call.
     /// Default: false (safe for local runs without AWS credentials).
@@ -86,6 +92,7 @@ public sealed class AppConfig
         UseLlmRewriter          = Bool("USE_LLM_REWRITER",         false),
         UseBedrockCache         = Bool("USE_BEDROCK_CACHE",         false),
         UseBedrockClassifier    = Bool("USE_BEDROCK_CLASSIFIER",    false),
+        UseBedrockDisambiguator = Bool("USE_BEDROCK_DISAMBIGUATOR", false),
         UseBedrockRag           = Bool("USE_BEDROCK_RAG",             false),
         CacheSimilarityThreshold = Double("CACHE_SIMILARITY_THRESHOLD", 0.88),
         EmbeddingDimensions     = Int("EMBEDDING_DIMENSIONS",       1536),

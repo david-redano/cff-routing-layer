@@ -18,6 +18,7 @@ public sealed class RoutingEngine
     private readonly PlanExecutor      _executor;
     private readonly IIntentRewriter   _rewriter;
     private readonly SessionStats?     _stats;
+    private readonly IDisambiguator?   _disambiguator;
 
     /// <summary>Exposes the underlying cache (used by Console renderer to list entries).</summary>
     public ISemanticCache Cache => _cache;
@@ -37,14 +38,16 @@ public sealed class RoutingEngine
         AgentRegistry registry,
         PlanExecutor executor,
         IIntentRewriter? rewriter = null,
-        SessionStats? stats = null)
+        SessionStats? stats = null,
+        IDisambiguator? disambiguator = null)
     {
-        _cache      = cache;
-        _classifier = classifier;
-        _registry   = registry;
-        _executor   = executor;
-        _rewriter   = rewriter ?? new RegexIntentRewriter();
-        _stats      = stats;
+        _cache          = cache;
+        _classifier     = classifier;
+        _registry       = registry;
+        _executor       = executor;
+        _rewriter       = rewriter ?? new RegexIntentRewriter();
+        _stats          = stats;
+        _disambiguator  = disambiguator;
     }
 
     /// <summary>
@@ -82,6 +85,11 @@ public sealed class RoutingEngine
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.WriteLine(
                 $"  ► Stage 2  Intent rewriter...              ✓ \"{rewritten.NormalizedText}\"");
+            if (rewritten.ExtractedEntities.Count > 0)
+            {
+                var slots = string.Join(", ", rewritten.ExtractedEntities.Select(kv => $"{kv.Key}={kv.Value}"));
+                Console.WriteLine($"             Slots: {slots}");
+            }
             Console.ResetColor();
         }
 
@@ -98,9 +106,21 @@ public sealed class RoutingEngine
                 $"  ► Stage 7  Executing plan (from cache)...");
             Console.ResetColor();
 
-            var enriched = context with { Entities = rewritten.ExtractedEntities };
+            // Rebuild the plan with fresh entities — structure comes from the registry
+            // (same YAML-driven steps as the original), but slots are re-populated from
+            // the current request so stale entity values never leak through.
+            var cacheAgents = _registry.Resolve(cached.Intent.AgentId);
+            var cacheAgent  = cacheAgents.Count == 1
+                ? cacheAgents[0]
+                : cacheAgents.FirstOrDefault(a => a.Intent == cached.Intent.Intent)
+                  ?? cacheAgents[0];
+            var freshEntities = new Dictionary<string, string>(rewritten.ExtractedEntities);
+            var freshIntent   = cached.Intent with { Entities = freshEntities };
+            var freshPlan     = cacheAgent.BuildPlan(freshIntent, context);
+
+            var enriched = context with { Entities = freshEntities };
             var exSw = Stopwatch.StartNew();
-            var cachedResult = await _executor.ExecuteAsync(cached.Plan, enriched, ct);
+            var cachedResult = await _executor.ExecuteAsync(freshPlan, enriched, ct);
             exSw.Stop();
             _stats?.RecordExecutorMs(exSw.ElapsedMilliseconds);
 
@@ -131,6 +151,7 @@ public sealed class RoutingEngine
             _stats.RecordLlmClassifierCall(0);
 
         var knownIntents = allIntents.Where(i => i.Intent != "Unknown").ToList();
+        bool fromFallback = false;
 
         if (knownIntents.Count == 0)
         {
@@ -153,12 +174,55 @@ public sealed class RoutingEngine
                 knownIntents = [new IntentResult(capable.Intent, 0.5,
                     new Dictionary<string, string>(rewritten.ExtractedEntities),
                     capable.AgentId, RequiresConfirmation: false)];
+                fromFallback = true;
             }
             else
             {
                 _stats?.RecordGuardrailRejection();
                 return ("I could not determine what you need. Please rephrase your accounting question.", false);
             }
+        }
+
+        // Stage 4c — Disambiguation (only when Stage 4b produced low-confidence candidates)
+        // Asks the LLM to verify each candidate against its plan Understanding description.
+        if (fromFallback && _disambiguator is not null && knownIntents.Count > 0)
+        {
+            var candidates = knownIntents
+                .Select(intent =>
+                {
+                    try
+                    {
+                        var agents = _registry.Resolve(intent.AgentId);
+                        var agent  = agents.FirstOrDefault(a => a.Intent == intent.Intent)
+                                     ?? agents[0];
+                        var desc   = !string.IsNullOrEmpty(agent.Understanding)
+                                     ? agent.Understanding
+                                     : agent.Description;
+                        return (intent.Intent, desc);
+                    }
+                    catch { return (intent.Intent, intent.Intent); }
+                })
+                .ToList();
+
+            var disambSw = Stopwatch.StartNew();
+            var selected = await _disambiguator.SelectAsync(
+                rewritten.NormalizedText, candidates, ct);
+            disambSw.Stop();
+
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine(selected is not null
+                ? $"  ► Stage 4c Disambiguation...               ✓ {selected} ({disambSw.ElapsedMilliseconds} ms)"
+                : $"  ► Stage 4c Disambiguation...               ✗ REJECTED — not an accounting intent ({disambSw.ElapsedMilliseconds} ms)");
+            Console.ResetColor();
+
+            if (selected is null)
+            {
+                _stats?.RecordGuardrailRejection();
+                return ("I can only assist with accounting and financial tasks. " +
+                        "Try asking about cash flow, invoices, reconciliation, taxes, or P&L.", false);
+            }
+
+            knownIntents = [knownIntents.First(i => i.Intent == selected)];
         }
 
         bool isMulti = knownIntents.Count > 1;

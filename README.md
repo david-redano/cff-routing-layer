@@ -16,6 +16,7 @@ An intent-driven **agent routing layer** for accounting and finance workflows, b
     - [Stage 3 — Semantic Cache](#stage-3--semantic-cache)
     - [Stage 4 — Intent Classification (multi-intent)](#stage-4--intent-classification-multi-intent)
     - [Stage 4b — Fallback Matching](#stage-4b--fallback-matching)
+    - [Stage 4c — LLM Disambiguation](#stage-4c--llm-disambiguation)
     - [Stage 5 — Agent Registry Lookup](#stage-5--agent-registry-lookup)
     - [Stage 6 — Execution Plan Generation](#stage-6--execution-plan-generation)
     - [Stage 7 — Execute \& Cache](#stage-7--execute--cache)
@@ -34,12 +35,19 @@ An intent-driven **agent routing layer** for accounting and finance workflows, b
   - [Feature Flags](#feature-flags)
   - [Full LLM Mode](#full-llm-mode)
     - [LLM layer map](#llm-layer-map)
+    - [Routing flow — example scenarios](#routing-flow--example-scenarios)
     - [Stage 2 — entity slots extracted by `LlmIntentRewriter`](#stage-2--entity-slots-extracted-by-llmintentrewriter)
     - [Stage 3 — semantic cache with Titan Embeddings V2](#stage-3--semantic-cache-with-titan-embeddings-v2)
     - [Stage 4 — LLM classifier for multi-intent](#stage-4--llm-classifier-for-multi-intent)
     - [Stage 7 — RAG report generation](#stage-7--rag-report-generation)
     - [Conversation history and compaction](#conversation-history-and-compaction)
   - [Configuration Reference](#configuration-reference)
+  - [Cost Analysis](#cost-analysis)
+    - [Per-call token estimates](#per-call-token-estimates)
+    - [Per-call cost](#per-call-cost)
+    - [Cost per routing scenario (all LLM flags enabled)](#cost-per-routing-scenario-all-llm-flags-enabled)
+    - [Monthly cost projection](#monthly-cost-projection)
+    - [Cost optimisation levers](#cost-optimisation-levers)
   - [Getting Started](#getting-started)
   - [Running Tests](#running-tests)
   - [Running Benchmarks](#running-benchmarks)
@@ -60,6 +68,7 @@ User message
 │  Stage 3   Semantic Cache  (cosine similarity lookup)        │
 │  Stage 4   Classifier      (multi-intent: rule-based or LLM) │
 │  Stage 4b  Fallback        (capability → understanding)      │
+│  Stage 4c  Disambiguation  (LLM confirmation of 4b match)    │
 │  Stage 5   Agent Registry  (O(1) lookup by AgentId)          │
 │  Stage 6   Plan Generation (from YAML steps + merged params) │
 │  Stage 7   Execution       (DAG steps → cache store)         │
@@ -86,6 +95,7 @@ cff-routing-layer/
 │   ├── .env / .env.template                  # Runtime configuration
 │   │
 │   ├── Bedrock/
+│   │   ├── BedrockDisambiguator.cs       # Claude Haiku Stage 4c LLM confirmation (USE_BEDROCK_DISAMBIGUATOR)
 │   │   ├── BedrockEmbeddingProvider.cs       # Titan Embeddings V2 + local disk cache
 │   │   ├── BedrockLlmClassifier.cs           # Claude Haiku intent classifier
 │   │   ├── BedrockSemanticCache.cs           # Bedrock-backed semantic cache
@@ -102,6 +112,7 @@ cff-routing-layer/
 │   │   └── InMemorySemanticCache.cs          # In-memory cosine similarity cache
 │   │
 │   ├── Classification/
+│   │   ├── IDisambiguator.cs                 # Disambiguation interface (Stage 4c)
 │   │   ├── IIntentClassifier.cs              # Classifier interface (Classify + ClassifyAll)
 │   │   └── RuleBasedClassifier.cs            # Keyword/regex classifier (no AWS)
 │   │
@@ -254,6 +265,22 @@ When Stage 4 returns only `Unknown`, two fallback strategies are tried in order:
 ```
 
 If both fallbacks fail, a "could not determine" response is returned with no Bedrock call.
+
+### Stage 4c — LLM Disambiguation
+
+When Stage 4b produces exactly one fallback candidate and `USE_BEDROCK_DISAMBIGUATOR=true`, the engine passes the query and the candidate's `Understanding` text to `BedrockDisambiguator` for LLM-level confirmation before routing.
+
+```
+► Stage 4   Intent classification...   ✗ Unknown (0%)
+► Stage 4b  Fallback match...          ✓ InvoiceAgent — understanding match [Create and send an invoice…]
+► Stage 4c  Disambiguation...          ✗ REJECTED — not an accounting intent (310 ms)
+```
+
+`BedrockDisambiguator` sends the user query and a numbered candidate list (intent name + Understanding description) to Claude Haiku (`max_tokens=20`, `temperature=0`) with a system prompt that instructs the model to reply with *only* the exact intent name or the single word `none`.
+
+**Rejection policy:** if the LLM returns `none`, the response is an unrecognised-intent message. On any error (network failure, null response, unexpected output), `SelectAsync` returns `null` — rejecting all candidates. A false-positive route (e.g. routing "create a customer" to `CreateInvoice`) is more harmful than a conservative rejection.
+
+**Guarded by `fromFallback` flag:** Stage 4c only fires when Stage 4b was the source of the candidate list, never on a direct Stage 4 classifier result, so the extra LLM call is incurred only for genuinely ambiguous fallback cases.
 
 ### Stage 5 — Agent Registry Lookup
 
@@ -502,10 +529,11 @@ All flags default to `false` — the system runs fully offline with no AWS crede
 
 | Flag | `false` (default) | `true` (live Bedrock) |
 |------|-------------------|-----------------------|
-| `USE_LLM_REWRITER` | `RegexIntentRewriter` (< 1 ms, no I/O) | `LlmIntentRewriter` — Claude Haiku with runtime context; handles coreferences |
+| `USE_LLM_REWRITER` | `RegexIntentRewriter` (< 1 ms, no I/O) | `LlmIntentRewriter` — Claude Haiku with runtime context; handles coreferences and 14-slot entity extraction with regex fallback supplement |
 | `USE_BEDROCK_CACHE` | `InMemorySemanticCache` + `EmbeddingSimulator` | `BedrockSemanticCache` + Titan Embeddings V2 |
 | `USE_BEDROCK_CLASSIFIER` | `RuleBasedClassifier` (deterministic, O(n)) | `BedrockLlmClassifier` — Claude Haiku; true multi-intent JSON response |
 | `USE_BEDROCK_RAG` | Local formatters (no Bedrock call) | `RagSummarizer` — Claude Haiku-narrated reports grounded in retrieved transactions |
+| `USE_BEDROCK_DISAMBIGUATOR` | Stage 4b fallback candidate routes directly | `BedrockDisambiguator` — Claude Haiku confirms or rejects Stage 4b fallback candidates; prevents false-positive routing |
 
 Flags are independent and composable. A common dev setup: `USE_LLM_REWRITER=true` only, to test coreference resolution without embedding or classification costs.
 
@@ -526,10 +554,76 @@ USE_BEDROCK_RAG=true
 
 | Stage | Component | Model | What it adds over local mode |
 |-------|-----------|-------|------------------------------|
-| **2 — Intent Rewriter** | `LlmIntentRewriter` | Claude 3 Haiku | 14-slot entity extraction; coreference resolution; runtime calendar context; surface normalisation |
+| **2 — Intent Rewriter** | `LlmIntentRewriter` | Claude 3 Haiku | 14-slot entity extraction; coreference resolution; runtime calendar context; regex fallback supplement for partial-extraction gaps |
 | **3 — Semantic Cache** | `BedrockSemanticCache` + `BedrockEmbeddingProvider` | Titan Embeddings V2 (1536-dim) | True semantic similarity at cosine ≥ 0.88; paraphrases hit the cache even when wording is completely different |
 | **4 — Intent Classification** | `BedrockLlmClassifier` | Claude 3 Haiku | True multi-intent: one call returns a JSON array of all triggered intents with confidence scores; handles ambiguous phrasing that defeats keyword scoring |
+| **4c — Disambiguation** | `BedrockDisambiguator` | Claude 3 Haiku | Confirms or rejects Stage 4b fallback candidates; prevents false-positive routing (e.g. "create a customer" → `CreateInvoice`) |
 | **7 — Report Generation** | `RagSummarizer` | Claude 3 Haiku | Narrative financial summaries grounded in the retrieved transaction records (Retrieve → Augment → Generate) |
+
+### Routing flow — example scenarios
+
+The diagram traces five representative queries through the pipeline. Bold edges mark the LLM calls that fire for each path; dashed edges are skipped stages.
+
+```mermaid
+flowchart TD
+    Q([User query]) --> S1{Stage 1<br/>Guardrails}
+
+    S1 -- "❌ off-domain<br/>'what is the weather?'" --> REJECT1([🚫 Rejected<br/>0 LLM calls])
+
+    S1 -- "✅ in-domain" --> S2["Stage 2 · LlmIntentRewriter<br/>🤖 Haiku — PII extraction + normalisation<br/>14-slot entities, coreference resolution"]
+
+    S2 --> S3{Stage 3<br/>Semantic Cache<br/>🔢 Titan Embeddings}
+
+    S3 -- "✅ HIT ≥ 0.88<br/>'show cash flow' → cached<br/>2nd call for same intent" --> S7_CACHED["Stage 7 · Execute from cache<br/>Fresh slots, cached plan structure"]
+    S7_CACHED --> RAG_HIT["Stage 7 · RagSummarizer<br/>🤖 Haiku — grounded narrative"]
+    RAG_HIT --> OUT_HIT([✅ Result<br/>2 Haiku + 1 Titan])
+
+    S3 -- "❌ MISS" --> S4["Stage 4 · BedrockLlmClassifier<br/>🤖 Haiku — JSON array of intents"]
+
+    S4 -- "✅ single intent<br/>'estimate my tax for this year'<br/>→ EstimateTaxLiability 70%" --> S5_S["Stage 5 · Registry lookup<br/>TaxAgent"]
+    S5_S --> S6_S["Stage 6 · Build plan<br/>4 steps from tax.yaml"]
+    S6_S --> S7_S["Stage 7 · Execute + store cache<br/>🤖 Haiku — RAG report"]
+    S7_S --> OUT_S([✅ Result<br/>3 Haiku + 1 Titan])
+
+    S4 -- "✅ multi-intent<br/>'cash flow and tax liability for Q1'<br/>→ [GenerateCashFlowReport, EstimateTaxLiability]" --> S5_M["Stage 5 · Registry loop<br/>BookkeepingAgent → TaxAgent"]
+    S5_M --> S6_M["Stage 6 · Build plans<br/>4 steps + 4 steps"]
+    S6_M --> S7_M["Stage 7 · Execute ×2<br/>🤖 Haiku ×2 — RAG per intent"]
+    S7_M --> OUT_M([✅ Concatenated result<br/>4 Haiku + 1 Titan])
+
+    S4 -- "❌ Unknown<br/>'show me something about billing trends'" --> S4B{Stage 4b<br/>Fallback<br/>no LLM}
+
+    S4B -- "✅ understanding match<br/>→ InvoiceAgent candidate" --> S4C["Stage 4c · BedrockDisambiguator<br/>🤖 Haiku — confirm or reject<br/>max_tokens=20"]
+
+    S4C -- "✅ confirmed<br/>→ ListInvoices" --> S5_D["Stage 5 · Registry lookup<br/>InvoiceAgent"]
+    S5_D --> S6_D["Stage 6 · Build plan<br/>2 steps"]
+    S6_D --> S7_D["Stage 7 · Execute + store cache<br/>🤖 Haiku — RAG"]
+    S7_D --> OUT_D([✅ Result<br/>4 Haiku + 1 Titan])
+
+    S4C -- "❌ rejected<br/>'create a customer named Eryk'<br/>→ none" --> REJECT2([🚫 Not an accounting intent<br/>3 Haiku + 1 Titan])
+
+    S4B -- "❌ no match" --> STREAM["BedrockStreamingConversation<br/>🤖 Haiku streaming — open-ended fallback"]
+    STREAM --> OUT_STREAM([✅ Streamed response<br/>3 Haiku + 1 Titan])
+
+    style REJECT1 fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    style REJECT2 fill:#fee2e2,stroke:#ef4444,color:#7f1d1d
+    style OUT_HIT  fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style OUT_S    fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style OUT_M    fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style OUT_D    fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style OUT_STREAM fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    style S2  fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style S4  fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style S4C fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style S7_CACHED fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style RAG_HIT fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style S7_S fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style S7_M fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style S7_D fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style STREAM fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a
+    style S3  fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+```
+
+> Blue nodes = LLM calls (Claude Haiku or Titan Embeddings). Green terminals = successful result. Red terminals = rejection. Yellow terminal = streaming open-ended fallback.
 
 ### Stage 2 — entity slots extracted by `LlmIntentRewriter`
 
@@ -628,6 +722,7 @@ USE_LLM_REWRITER=false
 USE_BEDROCK_CACHE=false
 USE_BEDROCK_CLASSIFIER=false
 USE_BEDROCK_RAG=false
+USE_BEDROCK_DISAMBIGUATOR=false
 
 # Semantic cache
 CACHE_SIMILARITY_THRESHOLD=0.88   # 0.75 for EmbeddingSimulator; 0.88 for Titan
@@ -644,6 +739,90 @@ AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_SESSION_TOKEN=...             # required when using temporary credentials
 ```
+
+---
+
+## Cost Analysis
+
+This section quantifies the AWS Bedrock cost of every possible routing path when all LLM feature flags are enabled. All figures use **Amazon Bedrock on-demand pricing (us-east-1, June 2026)**:
+
+| Model | Input | Output |
+|-------|-------|--------|
+| Claude 3 Haiku | $0.00025 / 1 K tokens | $0.00125 / 1 K tokens |
+| Titan Embeddings V2 | $0.00002 / 1 K tokens | — (vector only) |
+
+### Per-call token estimates
+
+Each component's expected token volume is derived from actual prompts and `max_tokens` settings in the codebase:
+
+| Component | Call site | Est. input tokens | Est. output tokens | Notes |
+|-----------|-----------|------------------:|-----------------:|-------|
+| `LlmIntentRewriter` | Stage 2 | ~1 100 | ~130 | Static rules (~700) + runtime calendar (~150) + user query (~30) + 4-turn history (~220); output is JSON entity block |
+| `BedrockEmbeddingProvider` | Stage 3 | ~35 | — | Normalised query text only; vector billed as input tokens |
+| `BedrockLlmClassifier` | Stage 4 | ~450 | ~70 | System prompt with canonical phrase list (~380) + normalised query (~35) + preamble (~35); output is a compact JSON array |
+| `BedrockDisambiguator` | Stage 4c | ~250 | ~8 | System prompt (~100) + query + 1–3 candidate lines (~150); `max_tokens=20` |
+| `RagSummarizer` | Stage 7 | ~900 | ~370 | System (~100) + up to 40 financial records (~750) + query context (~50); `max_tokens=400` |
+| `BedrockStreamingConversation` | Stage 7 fallback | ~350 | ~400 | Streaming open-ended response for unrecognised intents |
+| `ConversationHistory.CompactAsync` | History (every ~15 turns) | ~950 | ~110 | 7–8 oldest turns (~850) + compaction prompt (~100); output is a 2–3 sentence summary |
+
+### Per-call cost
+
+$$
+\text{cost} = \frac{\text{input tokens}}{1000} \times \$0.00025 + \frac{\text{output tokens}}{1000} \times \$0.00125
+$$
+
+| Component | Input cost | Output cost | Total per call |
+|-----------|----------:|------------:|---------------:|
+| `LlmIntentRewriter` | $0.000275 | $0.000163 | **$0.000438** |
+| `BedrockEmbeddingProvider` | $0.0000007 | — | **$0.000001** |
+| `BedrockLlmClassifier` | $0.000113 | $0.000088 | **$0.000201** |
+| `BedrockDisambiguator` | $0.000063 | $0.000010 | **$0.000073** |
+| `RagSummarizer` | $0.000225 | $0.000463 | **$0.000688** |
+| `BedrockStreamingConversation` | $0.000088 | $0.000500 | **$0.000588** |
+| `ConversationHistory.CompactAsync` | $0.000238 | $0.000138 | **$0.000376** |
+
+### Cost per routing scenario (all LLM flags enabled)
+
+The table below shows which LLM calls fire for each scenario and the total cost per request. Stages that are short-circuited (cache hit skipping Stages 4–6, guardrail rejecting before Stage 2) are marked with `—`.
+
+| Scenario | Rewriter | Embedding | Classifier | Disambiguator | RAG | Total / request |
+|----------|:--------:|:---------:|:----------:|:-------------:|:---:|---------------:|
+| **1 — Guardrail rejection** (Stage 1 blocks) | — | — | — | — | — | **$0.000000** |
+| **2 — Cache HIT** (Stage 3 hits, skip 4–6) | ✓ | ✓ | — | — | ✓ | **$0.001127** |
+| **3 — Cache MISS, single intent** | ✓ | ✓ | ✓ | — | ✓ | **$0.001328** |
+| **4 — Cache MISS, 2-intent multi-intent** | ✓ | ✓ | ✓ | — | ✓×2 | **$0.002016** |
+| **5 — Cache MISS, 3-intent multi-intent** | ✓ | ✓ | ✓ | — | ✓×3 | **$0.002704** |
+| **6 — Cache MISS, 4b fallback, no disambiguator** | ✓ | ✓ | ✓ | — | ✓ | **$0.001328** |
+| **7 — Cache MISS, 4b fallback + 4c accepted** | ✓ | ✓ | ✓ | ✓ | ✓ | **$0.001401** |
+| **7b — Cache MISS, 4b fallback + 4c rejected** | ✓ | ✓ | ✓ | ✓ | — | **$0.000713** |
+| **8 — Cache MISS, all classification fails → streaming** | ✓ | ✓ | ✓ | — | streaming | **$0.001228** |
+| **+History compaction** (amortised over ~7 active turns) | — | — | — | — | — | **+$0.000054 / turn** |
+
+> **Scenario 1** fires in local mode too — the guardrail is always a pure in-process check with zero Bedrock involvement regardless of feature flags.  
+> **Scenarios 4 & 5** multiply the RAG cost by the number of matched intents; the rewriter, embedding, and classifier each still fire exactly once.  
+> **Scenario 7b** has lower cost than a normal cache miss because the rejected query skips Stage 7 execution entirely.
+
+### Monthly cost projection
+
+Estimates assume **all five LLM flags enabled**, a typical accounting SaaS request mix (70 % reporting intents, 25 % invoicing, 5 % off-domain), and no cross-restart embedding disk-cache savings.
+
+| Daily active requests | Cache hit rate | Dominant scenario | Est. cost / day | Est. cost / month |
+|----------------------:|:--------------:|-------------------|----------------:|------------------:|
+| 1 000 | 0 % | Scenario 3 | $1.33 | **$39.80** |
+| 1 000 | 60 % | Scenarios 2 + 3 | $1.06 | **$31.70** |
+| 10 000 | 60 % | Scenarios 2 + 3 | $10.60 | **$318** |
+| 10 000 | 80 % | Scenarios 2 + 3 | $9.56 | **$287** |
+| 100 000 | 80 % | Scenarios 2 + 3 | $95.60 | **$2 868** |
+
+### Cost optimisation levers
+
+| Lever | Mechanism | Typical saving |
+|-------|-----------|---------------|
+| **Embedding disk cache** | `BedrockEmbeddingProvider` persists every vector to `embeddings_cache.json`; repeated strings across restarts incur zero Titan cost | Eliminates embedding cost for warm-path queries |
+| **Cache pre-warming** | `CacheWarmer` embeds `sampleQueries` from every plan YAML at startup; common queries hit Stage 3 immediately from the first request | 60–80 % cache hit rate achievable in production |
+| **Disable RAG selectively** | `USE_BEDROCK_RAG=false` on read-heavy paths (list queries, audit checks) where the local formatter is sufficient | Saves ~$0.000688 per request — the single largest per-call cost item |
+| **Raise cache threshold** | A stricter `CACHE_SIMILARITY_THRESHOLD` trades slightly lower hit rate for fewer false-positive cache hits; rarely affects cost materially | Minimal — threshold tuning is for accuracy, not cost |
+| **History compaction** | Compaction fires only every 15 turns and replaces ~7 turns with a 2-sentence summary; the $0.000376 one-time cost amortises to ~$0.000054/turn | Keeps history context tokens bounded at long sessions |
 
 ---
 
