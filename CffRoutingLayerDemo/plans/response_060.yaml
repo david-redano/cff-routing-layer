@@ -1,8 +1,8 @@
 planId: real-060
 intent: CountSalesQuotesGroupedMonth
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Count the number of sales quotes grouped by month"
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes grouped by month"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes for year"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Group by month, build chart and table"
     dependsOn: [1]
+    outputFields: [totalQuotes, monthsWithQuotes, displayedMonths, periodFrom, periodTo, periodLabel]

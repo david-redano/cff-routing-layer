@@ -1,8 +1,8 @@
 planId: real-047
 intent: CalculatePercentageSalesQuotesIssued
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate the percentage of sales quotes issued in February that were accepted (converted to Closed status)"
 capabilities:
   - sales-quotes
 understanding: "Calculate the percentage of sales quotes issued ${period} that were accepted (converted to Closed status)"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all quotes from February"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-02-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate acceptance percentage"
     dependsOn: [1]
+    outputFields: [acceptancePercentage, acceptedCount, totalQuotes, periodFrom, periodTo, periodLabel]

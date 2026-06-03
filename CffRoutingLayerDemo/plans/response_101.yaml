@@ -1,8 +1,8 @@
 planId: real-101
 intent: CalculateTotalMonetarySalesQuotes
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate the total monetary amount across all sales quotes with pending approval status"
 capabilities:
   - sales-quotes
 understanding: "Calculate the total monetary amount across all sales quotes with pending approval status"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch pending approval quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: status
         value: "Pending"
@@ -45,3 +46,4 @@ steps:
     functionName: buildOutput
     stepReason: "Sum pending quote amounts"
     dependsOn: [1]
+    outputFields: [quoteCount, totalPendingAmount, currency, periodFrom, periodTo, periodLabel]

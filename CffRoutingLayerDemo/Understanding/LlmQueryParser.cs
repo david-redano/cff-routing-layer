@@ -185,6 +185,7 @@ public sealed class LlmQueryParser : IQueryParser
             ExpectedOutput    = expectedOutput,
             SubIntents        = [],
             OverallConfidence = confidence,
+            ActionConfidence  = 1.0f,   // LLM explicitly classified the action
             ParsingNotes      = []
         };
     }

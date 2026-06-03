@@ -1,8 +1,8 @@
 planId: real-071
 intent: DetermineWhetherThereDaysNo
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Determine whether there are any days with no sales quote activity"
 capabilities:
   - sales-quotes
 understanding: "Determine whether there are any days with no sales quote activity"
@@ -30,6 +30,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -44,3 +45,4 @@ steps:
     functionName: detectGaps
     stepReason: "Detect days without quote activity"
     dependsOn: [1]
+    outputFields: [hasGaps, totalQuoteDays, totalDaysInRange, gapCount, periodFrom, periodTo, periodLabel]

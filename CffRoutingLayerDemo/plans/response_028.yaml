@@ -1,8 +1,8 @@
 planId: real-028
 intent: FindSalesOrdersCreatedApril
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Find all sales orders created on 16 April 2026"
 capabilities:
   - sales-orders
 understanding: "Find all sales orders created on ${date}"
@@ -29,6 +29,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch orders created on 16 April 2026"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: date_from
         value: "2026-04-16"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Build table output with order details"
     dependsOn: [1]
+    outputFields: [orderCount, totalValue, currency, periodFrom, periodTo, periodLabel]

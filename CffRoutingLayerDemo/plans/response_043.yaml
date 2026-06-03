@@ -1,8 +1,8 @@
 planId: real-043
 intent: CalculatePercentageSalesQuotesClosed
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate what percentage of all sales quotes have a Closed status"
 capabilities:
   - sales-quotes
 understanding: "Calculate what percentage of all sales quotes have a Closed status"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2025-06-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate closed quote percentage"
     dependsOn: [1]
+    outputFields: [totalQuotes, closedQuotes, closedPercentage, periodFrom, periodTo, periodLabel]

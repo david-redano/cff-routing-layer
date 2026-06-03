@@ -1,6 +1,7 @@
 planId: reconcile-001
 intent: ReconcileAccount
 agentId: ReconciliationAgent
+domain: finance
 displayName: Reconciliation Agent
 description: "Reconcile a bank account against ledger entries for a given period"
 capabilities:
@@ -26,15 +27,20 @@ steps:
   - id: 1
     action: fetch-bank-statement
     dependsOn: []
+    outputFields: [bankTransactions]
   - id: 2
     action: fetch-ledger-entries
     dependsOn: []
+    outputFields: [ledgerEntries]
   - id: 3
     action: match-transactions
     dependsOn: [1, 2]
+    outputFields: [matchedTransactions, unmatchedTransactions]
   - id: 4
     action: flag-discrepancies
     dependsOn: [3]
+    outputFields: [discrepancies]
   - id: 5
     action: generate-reconciliation-report
     dependsOn: [4]
+    outputFields: [report]

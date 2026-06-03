@@ -1,8 +1,8 @@
 planId: real-105
 intent: DetermineWhetherTrialBalanceBalance
 agentId: AccountingAgent
+domain: finance
 displayName: Accounting Agent
-description: "Determine whether the trial balance and balance sheet are in agreement — specifically, whether debits equal credits on the trial balance and whether the balance sheet totals reconcile to those balances"
 capabilities:
   - accounting-get-trial-balance
   - accounting-get-balance-sheet
@@ -32,6 +32,7 @@ steps:
     toolId: "36d50511-2bd3-c1f1-27dd-6c48905dca06"
     stepReason: "Fetch trial balance"
     dependsOn: []
+    outputFields: [trialBalance]
     input:
       - key: end_date
         value: "2026-06-01"
@@ -43,6 +44,7 @@ steps:
     toolId: "66edba23-cd30-c840-7cfb-057f0bda1aba"
     stepReason: "Fetch balance sheet"
     dependsOn: [1]
+    outputFields: [balanceSheet]
     input:
       - key: end_date
         value: "2026-06-01"
@@ -53,3 +55,4 @@ steps:
     functionName: validateReconciliation
     stepReason: "Validate trial balance and balance sheet reconciliation"
     dependsOn: [2]
+    outputFields: [trialBalanceInBalance, balanceSheetInBalance, reconciliationStatus, totalDebits, totalCredits, totalAssets, totalLiabilities, totalEquity, currency, discrepancyDescription]

@@ -1,8 +1,8 @@
 planId: real-024
 intent: ListSalesOrdersCustomerBonarea
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "List all sales orders for the customer Bonarea Energia Sl"
 capabilities:
   - sales-customers
   - sales-orders
@@ -28,6 +28,7 @@ steps:
     toolId: "de798796-6a20-ce1a-f686-dc224799debc"
     stepReason: "Search for customer Bonarea Energia Sl"
     dependsOn: []
+    outputFields: [customers]
     input:
       - key: query
         value: "Bonarea Energia Sl"
@@ -40,6 +41,7 @@ steps:
     functionName: validateCustomer
     stepReason: "Validate single customer match"
     dependsOn: [1]
+    outputFields: [step2Result]
     nextStep: 3
   - id: 3
     action: sales-list-sales-orders
@@ -48,6 +50,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch all orders for customer"
     dependsOn: [2]
+    outputFields: [orders]
     input:
       - key: customer_id
         value: "$.Step2.CustomerId"
@@ -64,3 +67,4 @@ steps:
     functionName: buildOutput
     stepReason: "Build table output with order details"
     dependsOn: [3]
+    outputFields: [customerName, orderCount, totalOrderValue, currency]

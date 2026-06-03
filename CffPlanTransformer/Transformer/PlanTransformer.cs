@@ -75,8 +75,8 @@ internal static class PlanTransformer
         sb.AppendLine($"planId: {planId}");
         sb.AppendLine($"intent: {intent}");
         sb.AppendLine($"agentId: {agentId}");
+        sb.AppendLine($"domain: {DeriveYamlDomain(agentId)}");
         sb.AppendLine($"displayName: {displayName}");
-        sb.AppendLine($"description: \"{EscapeYaml(plan.Understanding)}\"");
 
         // Normalized understanding replaces concrete slot values with ${slot} placeholders
         // so that embeddings generalise across parameter variations (e.g. "last 30 days"
@@ -109,6 +109,13 @@ internal static class PlanTransformer
         sb.AppendLine($"  - \"{EscapeYaml(GenerateAltQuery(normUnderstanding))}\"");
 
         sb.AppendLine("steps:");
+
+        // Determine which step is the final output step (no nextStep pointer)
+        var finalStepId = plan.Steps
+            .Where(s => !s.NextStep.HasValue)
+            .Select(s => (int?)s.Id)
+            .FirstOrDefault() ?? (plan.Steps.Count > 0 ? plan.Steps.Max(s => s.Id) : -1);
+
         foreach (var step in plan.Steps)
         {
             sb.AppendLine($"  - id: {step.Id}");
@@ -138,6 +145,10 @@ internal static class PlanTransformer
             sb.AppendLine(deps.Count == 0
                 ? "    dependsOn: []"
                 : $"    dependsOn: [{string.Join(", ", deps)}]");
+
+            // outputFields — what this step produces for downstream steps
+            var outputFields = InferStepOutputFields(step, step.Id == finalStepId ? plan.SummaryFields : []);
+            sb.AppendLine($"    outputFields: [{string.Join(", ", outputFields)}]");
 
             // Input params (Tool steps)
             if (step.Input.Count > 0)
@@ -416,6 +427,96 @@ internal static class PlanTransformer
                 result[step.NextStep.Value].Add(step.Id);
         }
         return result;
+    }
+
+    // ── Domain mapping ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Maps the derived agentId back to the canonical domain used by PlanFeatureExtractor.
+    /// </summary>
+    private static string DeriveYamlDomain(string agentId) =>
+        agentId switch
+        {
+            "SalesAgent"      => "sales",
+            "PurchasesAgent"  => "sales",
+            "InventoryAgent"  => "inventory",
+            "AccountingAgent" => "finance",
+            "AnalysisAgent"   => "finance",
+            _                 => "finance"   // FinancialAgent and any future agents
+        };
+
+    // ── Step output field inference ─────────────────────────────────────────
+
+    /// <summary>
+    /// Infers the output field names a step produces.
+    /// <list type="bullet">
+    ///   <item>Final output step → summary fields from ExpectedData (camelCased).</item>
+    ///   <item>Tool step        → entity name derived from the tool name (camelCased).</item>
+    ///   <item>Code step (intermediate) → generic sentinel <c>step{id}Result</c>.</item>
+    /// </list>
+    /// </summary>
+    private static List<string> InferStepOutputFields(ResponseStep step, List<string> summaryFields)
+    {
+        // Final output step: emit summary field names (camelCased)
+        if (summaryFields.Count > 0)
+            return summaryFields.Select(ToCamelCase).ToList();
+
+        // Tool step: infer entity from tool name (e.g. sales_list_sales_orders → salesOrders)
+        if (string.Equals(step.Type, "Tool", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrEmpty(step.ToolName))
+        {
+            return [InferToolOutputEntity(step.ToolName, step.Id)];
+        }
+
+        // Code (intermediate) or unknown
+        return [$"step{step.Id}Result"];
+    }
+
+    /// <summary>
+    /// Derives the primary entity name a tool step produces.
+    /// Rule: strip domain prefix and action verb, join remaining parts in camelCase.
+    /// Examples:
+    ///   sales_list_sales_orders → salesOrders
+    ///   analysis_aggregate_entity → aggregateResult
+    ///   accounting_list_invoices → invoices
+    /// </summary>
+    private static string InferToolOutputEntity(string toolName, int stepId)
+    {
+        var parts = toolName.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2) return $"step{stepId}Data";
+
+        // Drop the domain prefix (first part)
+        var afterDomain = parts.Skip(1).ToArray();
+
+        // Drop the action verb (list, get, fetch, create, update, delete, aggregate, etc.)
+        var verbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "list", "get", "fetch", "create", "update", "delete", "aggregate", "compute", "find", "search" };
+
+        var entityParts = afterDomain.SkipWhile(p => verbs.Contains(p)).ToArray();
+
+        if (entityParts.Length == 0)
+        {
+            // Verb-only tool (e.g. analysis_aggregate) → generic result
+            return $"step{stepId}Data";
+        }
+
+        // Deduplicate repeated domain prefix in entity parts
+        // (e.g. sales_list_sales_orders: domain=sales, entity parts=["sales","orders"] → drop leading repeat)
+        var domainPart = parts[0];
+        if (entityParts[0].Equals(domainPart, StringComparison.OrdinalIgnoreCase) && entityParts.Length > 1)
+            entityParts = entityParts.Skip(1).ToArray();
+
+        // Build camelCase: first part lowercase, subsequent parts title-cased
+        var camel = new StringBuilder(entityParts[0].ToLowerInvariant());
+        foreach (var p in entityParts.Skip(1))
+            camel.Append(char.ToUpperInvariant(p[0])).Append(p[1..].ToLowerInvariant());
+        return camel.ToString();
+    }
+
+    private static string ToCamelCase(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        return char.ToLowerInvariant(s[0]) + s[1..];
     }
 
     // ── YAML helpers ────────────────────────────────────────────────────────

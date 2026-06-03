@@ -1,8 +1,8 @@
 planId: real-009
 intent: CountSalesOrdersPlacedDuring
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Count the number of sales orders placed during the current month"
 capabilities:
   - sales-orders
 understanding: "Count the number of sales orders placed during the current month"
@@ -27,6 +27,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch sales orders for current month"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: date_from
         value: "2026-05-01"
@@ -41,3 +42,4 @@ steps:
     functionName: buildOutput
     stepReason: "Count orders and build output"
     dependsOn: [1]
+    outputFields: [orderCount, periodFrom, periodTo, periodLabel]

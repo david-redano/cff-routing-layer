@@ -1,8 +1,8 @@
 planId: real-100
 intent: CompareTotalSalesQuotesIssued
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Compare the total amount of sales quotes issued in the current period to the same period last year"
 capabilities:
   - sales-quotes
 understanding: "Compare the total amount of sales quotes issued in the current period to the same period ${period}"
@@ -32,6 +32,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch quotes for current period YTD"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -47,6 +48,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch quotes for prior-year same period"
     dependsOn: [1]
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2025-01-01"
@@ -61,3 +63,4 @@ steps:
     functionName: buildOutput
     stepReason: "Compare quote amounts year-over-year"
     dependsOn: [2]
+    outputFields: [currentPeriodAmount, priorPeriodAmount, changeAmount, changePercent, direction, currency, periodFrom, periodTo, periodLabel]

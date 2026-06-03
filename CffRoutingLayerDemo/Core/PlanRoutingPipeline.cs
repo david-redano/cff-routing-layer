@@ -18,6 +18,7 @@ using CffRoutingLayerDemo.Validation;
 ///   Layer 4 — Plan Validation       (verify selected plan can execute with available slots)
 ///
 /// Produces a RoutingDecision with a full diagnostic trace for every query.
+/// Execution of the selected plan is the caller's responsibility.
 /// </summary>
 public sealed class PlanRoutingPipeline
 {
@@ -25,30 +26,27 @@ public sealed class PlanRoutingPipeline
     private readonly IPlanIndex     _planIndex;
     private readonly IPlanRanker    _ranker;
     private readonly IPlanValidator _validator;
-    private readonly PlanExecutor   _executor;
 
     public PlanRoutingPipeline(
         IQueryParser   queryParser,
         IPlanIndex     planIndex,
         IPlanRanker    ranker,
-        IPlanValidator validator,
-        PlanExecutor   executor)
+        IPlanValidator validator)
     {
         _queryParser = queryParser;
         _planIndex   = planIndex;
         _ranker      = ranker;
         _validator   = validator;
-        _executor    = executor;
     }
 
     /// <summary>
-    /// Route a user query to the best matching plan, execute it, and return the result.
+    /// Route a user query through the 4-layer pipeline and return a routing decision.
+    /// Execution of the selected plan is the caller's responsibility.
     /// </summary>
-    public async Task<(string Result, RoutingDecision Decision)> HandleAsync(
-        string rawQuery,
-        string companyId       = "DEMO-001",
-        ConversationContext?   context = null,
-        CancellationToken      ct = default)
+    public async Task<RoutingDecision> RouteAsync(
+        string               rawQuery,
+        ConversationContext?  context = null,
+        CancellationToken    ct      = default)
     {
         var totalSw = Stopwatch.StartNew();
         var layers  = new List<LayerTrace>();
@@ -92,16 +90,13 @@ public sealed class PlanRoutingPipeline
         if (intent.OverallConfidence < 0.25f)
         {
             notes.Add($"Rejected: confidence {intent.OverallConfidence:P0} below threshold");
-            var trace = BuildTrace();
-            return ("I can only assist with accounting and financial tasks. " +
-                    "Try asking about cash flow, invoices, reconciliation, taxes, or P&L.",
-                    RoutingDecision.Rejected("Confidence below threshold", trace));
+            return RoutingDecision.Rejected("Confidence below threshold", BuildTrace());
         }
 
         // ═════════════════════════════════════════════════
         // Layer 2 — Plan Retrieval
         // ═════════════════════════════════════════════════
-        var l2Sw      = Stopwatch.StartNew();
+        var l2Sw       = Stopwatch.StartNew();
         var candidates = _planIndex.Retrieve(intent, maxCandidates: 5);
         l2Sw.Stop();
 
@@ -115,16 +110,14 @@ public sealed class PlanRoutingPipeline
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine($"  ► Layer 2  Plan retrieval...               ✓ {candidates.Count} candidates");
-        if (candidates.Count > 0)
-            Console.WriteLine($"             Top: {candidates[0].Plan.PlanId} ({candidates[0].AlignmentScore:P0})");
+        foreach (var c in candidates)
+            Console.WriteLine($"             • {c.Plan.PlanId} ({c.AlignmentScore:P0})");
         Console.ResetColor();
 
         if (candidates.Count == 0)
         {
             notes.Add("No plans survived structural filters");
-            var trace = BuildTrace();
-            return ("I could not find a plan that matches your request. Please rephrase your accounting question.",
-                    RoutingDecision.NoPlanFound($"No plans match domain={intent.Domain}, action={intent.PrimaryAction}", trace));
+            return RoutingDecision.NoPlanFound($"No plans match domain={intent.Domain}, action={intent.PrimaryAction}", BuildTrace());
         }
 
         // ═════════════════════════════════════════════════
@@ -143,20 +136,28 @@ public sealed class PlanRoutingPipeline
         }));
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"  ► Layer 3  Plan ranking...                 ✓ {ranking.Candidates.FirstOrDefault()?.Plan.PlanId} ({ranking.TopConfidence:P0})" +
+        Console.WriteLine($"  ► Layer 3  Plan ranking...                 ✓ {ranking.Candidates.Count} candidates" +
                           (ranking.IsAmbiguous ? " [AMBIGUOUS]" : ""));
+        foreach (var c in ranking.Candidates)
+            Console.WriteLine($"             • {c.Plan.PlanId} ({c.Score:P0})");
         Console.ResetColor();
 
         if (ranking.TopConfidence < 0.35f)
         {
             notes.Add($"Low confidence: top score {ranking.TopConfidence:P0}");
-            var trace = BuildTrace();
-            return ("I found possible matches but am not confident enough to proceed. " +
-                    "Please be more specific about what you need.",
-                    RoutingDecision.LowConfidence(
-                        $"Best candidate scored {ranking.TopConfidence:P0} — below threshold",
-                        ranking.Candidates.Select(c => c.Plan.PlanId).ToList(),
-                        trace));
+            return RoutingDecision.NoPlanFound(
+                $"Best candidate scored {ranking.TopConfidence:P0} \u2014 no confident match found",
+                BuildTrace());
+        }
+
+        // Reject when all top candidates are statistically tied and none scores high enough
+        // to be trusted as the correct plan for this query.
+        if (ranking.IsAmbiguous && ranking.TopConfidence < 0.65f)
+        {
+            notes.Add($"Ambiguous: top score {ranking.TopConfidence:P0}, candidates tied within 0.10");
+            return RoutingDecision.NoPlanFound(
+                $"No confident match found \u2014 top {ranking.Candidates.Count} candidates all score around {ranking.TopConfidence:P0}",
+                BuildTrace());
         }
 
         // ═════════════════════════════════════════════════
@@ -187,12 +188,9 @@ public sealed class PlanRoutingPipeline
             if (validation.Status == ValidationStatus.Fail)
             {
                 notes.Add($"Candidate {candidate.Plan.PlanId} failed validation: {string.Join("; ", validation.Errors)}");
-                continue; // Try next candidate
+                continue;
             }
 
-            // ═════════════════════════════════════════════
-            // Execute selected plan
-            // ═════════════════════════════════════════════
             var selected = new SelectedPlan
             {
                 Plan             = candidate.Plan,
@@ -202,33 +200,11 @@ public sealed class PlanRoutingPipeline
                 Explanation      = attempt == 0 ? candidate.Explanation : $"Fallback #{attempt + 1}: {candidate.Explanation}"
             };
 
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"  ► Execute  Running plan {selected.Plan.PlanId}...");
-            Console.ResetColor();
-
-            // Build RoutingContext for executor compatibility
-            var routingCtx = new RoutingContext(
-                RequestId:   Guid.NewGuid().ToString(),
-                UserMessage: rawQuery,
-                CompanyId:   companyId,
-                Timestamp:   DateTime.UtcNow,
-                Entities:    bindings.ToDictionary(b => b.SlotName, b => b.Value));
-
-            var executionPlan = BuildExecutionPlan(selected, routingCtx);
-            var result        = await _executor.ExecuteAsync(executionPlan, routingCtx, ct);
-
-            var decision = RoutingDecision.Success(selected, BuildTrace());
-            return (result, decision);
+            return RoutingDecision.Success(selected, BuildTrace());
         }
 
         // All candidates failed validation
-        {
-            var trace = BuildTrace();
-            return ("I found matching plans but could not satisfy all required parameters. " +
-                    "Please provide more details.",
-                    RoutingDecision.ValidationFailed(
-                        "All candidates failed slot coverage validation", trace));
-        }
+        return RoutingDecision.ValidationFailed("All candidates failed slot coverage validation", BuildTrace());
     }
 
     private static IReadOnlyList<SlotBinding> BuildSlotBindings(QueryIntent intent, PlanDefinition plan)
@@ -306,37 +282,6 @@ public sealed class PlanRoutingPipeline
         }
 
         return bindings;
-    }
-
-    private static ExecutionPlan BuildExecutionPlan(SelectedPlan selected, RoutingContext ctx)
-    {
-        var entities = selected.SlotBindings.ToDictionary(
-            b => b.SlotName, b => b.Value, StringComparer.OrdinalIgnoreCase);
-
-        var steps = selected.Plan.Steps.Select(s => new PlanStep(
-            StepId:    s.Id,
-            Action:    string.IsNullOrEmpty(s.ToolName) ? s.Action : s.ToolName,
-            Input:     MergeParameters(s.Parameters, entities),
-            DependsOn: s.DependsOn.ToArray()
-        )).ToList();
-
-        return new ExecutionPlan(
-            PlanId: $"{selected.Plan.PlanId}-{ctx.RequestId[..8]}",
-            Intent: selected.Plan.Intent,
-            Steps:  steps);
-    }
-
-    private static Dictionary<string, string> MergeParameters(
-        Dictionary<string, string> stepParams,
-        Dictionary<string, string> entities)
-    {
-        var merged = new Dictionary<string, string>(stepParams, StringComparer.OrdinalIgnoreCase);
-        foreach (var (k, v) in entities)
-        {
-            if (!merged.ContainsKey(k))
-                merged[k] = v;
-        }
-        return merged;
     }
 
     private sealed record LayerTrace(string Name, double ElapsedMs, object? Result);

@@ -1,6 +1,7 @@
 planId: taxopt-001
 intent: OptimizeTaxDeductions
 agentId: TaxOptimizationAgent
+domain: finance
 displayName: Tax Optimization Agent
 description: "Identify and rank tax deduction opportunities for a given year"
 capabilities:
@@ -24,12 +25,16 @@ steps:
   - id: 1
     action: fetch-expenses
     dependsOn: []
+    outputFields: [expenses]
   - id: 2
     action: categorize-deductibles
     dependsOn: [1]
+    outputFields: [deductibleCategories]
   - id: 3
     action: rank-deductions
     dependsOn: [2]
+    outputFields: [rankedDeductions, totalDeductions, potentialSavings]
   - id: 4
     action: generate-optimization-report
     dependsOn: [3]
+    outputFields: [report]

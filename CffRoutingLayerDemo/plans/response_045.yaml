@@ -1,8 +1,8 @@
 planId: real-045
 intent: ShowTotalSalesInvoicesIssued
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Show the total amount of sales invoices issued last month that have already been collected (paid)"
 capabilities:
   - sales-invoices
 understanding: "Show the total amount of sales invoices issued ${period} that have already been collected (paid)"
@@ -26,6 +26,7 @@ steps:
     toolId: "f5fc423c-2544-084c-56df-09d849ac1737"
     stepReason: "Fetch paid invoices from last month"
     dependsOn: []
+    outputFields: [invoices]
     input:
       - key: status
         value: "Paid"
@@ -42,3 +43,4 @@ steps:
     functionName: buildOutput
     stepReason: "Sum collected amounts and build output"
     dependsOn: [1]
+    outputFields: [totalCollected, invoiceCount, currency]

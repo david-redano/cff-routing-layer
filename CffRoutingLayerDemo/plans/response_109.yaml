@@ -1,8 +1,8 @@
 planId: real-109
 intent: IdentifyLedgerAccountTrialBalance
 agentId: AccountingAgent
+domain: finance
 displayName: Accounting Agent
-description: "Identify which ledger account in the trial balance had the largest change in balance"
 capabilities:
   - accounting-get-trial-balance
 understanding: "Identify which ledger account in the trial balance had the largest change in balance"
@@ -27,6 +27,7 @@ steps:
     toolId: "36d50511-2bd3-c1f1-27dd-6c48905dca06"
     stepReason: "Fetch trial balance for current period"
     dependsOn: []
+    outputFields: [trialBalance]
     input:
       - key: end_date
         value: "2026-06-01"
@@ -37,3 +38,4 @@ steps:
     functionName: buildOutput
     stepReason: "Identify account with largest movement"
     dependsOn: [1]
+    outputFields: [topAccountCode, topAccountName, largestMovement, currency, totalAccountsAnalysed, tieCount]

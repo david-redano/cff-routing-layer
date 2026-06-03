@@ -1,8 +1,8 @@
 planId: real-036
 intent: ListSalesOrdersCurrentlyPending
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "List all sales orders that are currently in Pending state"
 capabilities:
   - sales-orders
 understanding: "List all sales orders that are currently in Pending state"
@@ -26,6 +26,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch pending sales orders"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: status
         value: "pending"
@@ -42,3 +43,4 @@ steps:
     functionName: buildOutput
     stepReason: "Build table output with pending orders"
     dependsOn: [1]
+    outputFields: [orderCount, totalAmount, currency]

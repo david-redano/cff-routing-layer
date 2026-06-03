@@ -1,8 +1,8 @@
 planId: real-004
 intent: CalculateConversionRateAsPercentage
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate the conversion rate as a percentage: number of closed sales quotes divided by total sales quotes"
 capabilities:
   - sales-quotes
 understanding: "Calculate the conversion rate as a percentage: number of closed sales quotes divided by total sales quotes"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-04-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate conversion rate"
     dependsOn: [1]
+    outputFields: [conversionRate, closedQuotes, totalQuotes, periodFrom, periodTo, periodLabel]

@@ -1,8 +1,8 @@
 planId: real-003
 intent: IdentifyCustomersInvoiceOrderAmounts
 agentId: AnalysisAgent
+domain: finance
 displayName: Analysis Agent
-description: "Identify customers who have high invoice/order amounts but have received very few quotes"
 capabilities:
   - analysis-aggregation
 understanding: "Identify customers who have high invoice/order amounts but have received very few quotes"
@@ -30,6 +30,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Aggregate invoice amounts by customer"
     dependsOn: []
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_invoices"
@@ -57,6 +58,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Count quotes by customer"
     dependsOn: [1]
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_quotes"
@@ -79,3 +81,4 @@ steps:
     functionName: buildOutput
     stepReason: "Merge, filter, and build output"
     dependsOn: [2]
+    outputFields: [highAmountLowQuoteCount, totalAmount, averageQuotesPerCustomer, currency, periodFrom, periodTo, periodLabel]

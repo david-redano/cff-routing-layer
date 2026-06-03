@@ -1,6 +1,7 @@
 planId: invoice-001
 intent: CreateInvoice
 agentId: InvoiceAgent
+domain: finance
 displayName: Invoice Agent
 description: "Create an invoice for a customer with a given amount"
 capabilities:
@@ -25,12 +26,16 @@ steps:
   - id: 1
     action: validate-customer
     dependsOn: []
+    outputFields: [customerId, customerName]
   - id: 2
     action: create-invoice-record
     dependsOn: [1]
+    outputFields: [invoiceId, amount]
   - id: 3
     action: apply-tax
     dependsOn: [2]
+    outputFields: [taxAmount, totalAmount]
   - id: 4
     action: send-invoice
     dependsOn: [3]
+    outputFields: [status]

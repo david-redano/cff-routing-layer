@@ -54,8 +54,27 @@ public sealed class PlanFeatureExtractor
 
     private static string InferDomain(PlanDefinition plan)
     {
+        // 1. Explicit domain from YAML — highest priority
+        if (!string.IsNullOrWhiteSpace(plan.Domain))
+            return plan.Domain.ToLowerInvariant();
+
+        // 2. Tool naming convention: domain_verb_noun (e.g. sales_list_customers → "sales")
+        var toolPrefix = plan.Steps
+            .Select(s => string.IsNullOrEmpty(s.ToolName) ? s.Action : s.ToolName)
+            .Where(t => t.Contains('_'))
+            .Select(t => t.Split('_')[0].ToLowerInvariant())
+            .Where(p => p.Length >= 2)
+            .GroupBy(p => p)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .FirstOrDefault();
+
+        if (toolPrefix is not null && IsKnownDomain(toolPrefix))
+            return toolPrefix;
+
+        // 3. Fall back to capability/understanding text analysis
         var capabilities = plan.Capabilities;
-        var combined = (plan.Description + " " + plan.Understanding + " " +
+        var combined = (plan.Understanding + " " +
                         string.Join(" ", capabilities)).ToLowerInvariant();
 
         if (combined.Contains("invoice") || combined.Contains("billing") ||
@@ -77,9 +96,12 @@ public sealed class PlanFeatureExtractor
         return "general";
     }
 
+    private static bool IsKnownDomain(string prefix) =>
+        prefix is "sales" or "finance" or "inventory" or "hr" or "accounting";
+
     private static string InferSubDomain(PlanDefinition plan)
     {
-        var text = (plan.Intent + " " + plan.Description + " " + plan.Understanding).ToLowerInvariant();
+        var text = (plan.Intent + " " + plan.Understanding).ToLowerInvariant();
 
         if (text.Contains("cashflow") || text.Contains("cash flow")) return "cashflow";
         if (text.Contains("invoice"))                                  return "invoicing";

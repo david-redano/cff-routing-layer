@@ -1,8 +1,8 @@
 planId: real-007
 intent: IdentifySingleDayHadSales
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which single day had the highest number of sales orders placed"
 capabilities:
   - sales-orders
 understanding: "Identify which single day had the highest number of sales orders placed"
@@ -28,6 +28,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch all sales orders"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -42,3 +43,4 @@ steps:
     functionName: buildOutput
     stepReason: "Group by date, find day with most orders"
     dependsOn: [1]
+    outputFields: [mostActiveDay, orderCount, periodFrom, periodTo, periodLabel]

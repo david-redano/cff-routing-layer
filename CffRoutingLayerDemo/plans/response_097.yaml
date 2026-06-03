@@ -1,8 +1,8 @@
 planId: real-097
 intent: IdentifyProductsAppearFrequentlySales
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which products appear most frequently in sales quotes, ranked by quote count for the current month, year, and quarter"
 capabilities:
   - sales-quotes
   - sales-get-quote
@@ -30,6 +30,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes for FY"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -44,3 +45,4 @@ steps:
     functionName: buildOutput
     stepReason: "Extract products from quotes and rank by frequency"
     dependsOn: [1]
+    outputFields: [totalProducts, topProducts, totalQuotes, periodFrom, periodTo, periodLabel]

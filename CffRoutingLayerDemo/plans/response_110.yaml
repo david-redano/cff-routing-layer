@@ -1,8 +1,8 @@
 planId: real-110
 intent: CalculateEstimatedTaxProvisionCurrent
 agentId: AccountingAgent
+domain: finance
 displayName: Accounting Agent
-description: "Calculate estimated tax provision based on current pre-tax income"
 capabilities:
   - accounting-get-income-statement-es
 understanding: "Calculate estimated tax provision based on current pre-tax income"
@@ -26,6 +26,7 @@ steps:
     toolId: "efcc4b47-875c-ffc0-3a17-21267e7e64b4"
     stepReason: "Fetch current income statement"
     dependsOn: []
+    outputFields: [incomeStatementEs]
     input:
       - key: end_date
         value: "2026-06-01"
@@ -36,3 +37,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate estimated tax provision"
     dependsOn: [1]
+    outputFields: [preTaxIncome, estimatedTaxRate, estimatedTaxProvision, currency, periodEnd]

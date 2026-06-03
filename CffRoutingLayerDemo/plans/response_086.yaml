@@ -1,8 +1,8 @@
 planId: real-086
 intent: IdentifyCustomerQuotesQuotes
 agentId: AnalysisAgent
+domain: finance
 displayName: Analysis Agent
-description: "Identify which customer has the highest number of quotes and which has the lowest number of quotes"
 capabilities:
   - analysis-aggregation
 understanding: "Identify which customer has the highest number of quotes and which has the lowest number of quotes"
@@ -27,6 +27,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Aggregate quote count by customer"
     dependsOn: []
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_quotes"
@@ -49,3 +50,4 @@ steps:
     functionName: buildOutput
     stepReason: "Build comparison output with top and bottom"
     dependsOn: [1]
+    outputFields: [topCustomer, topCustomerQuoteCount, bottomCustomer, bottomCustomerQuoteCount, totalCustomers, totalQuotes]

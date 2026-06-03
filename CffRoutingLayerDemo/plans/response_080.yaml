@@ -1,8 +1,8 @@
 planId: real-080
 intent: ShowTotalQuotedClient
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Show the total quoted amount for each client"
 capabilities:
   - sales-quotes
 understanding: "Show the total quoted amount for each client"
@@ -30,6 +30,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -44,3 +45,4 @@ steps:
     functionName: buildOutput
     stepReason: "Group by customer, sum amounts, build output"
     dependsOn: [1]
+    outputFields: [totalCustomers, chartedCustomers, totalQuoted, currency, periodFrom, periodTo, periodLabel]

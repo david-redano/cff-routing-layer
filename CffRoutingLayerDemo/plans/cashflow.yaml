@@ -1,6 +1,7 @@
 planId: cashflow-001
 intent: GenerateCashFlowReport
 agentId: BookkeepingAgent
+domain: finance
 displayName: Bookkeeping Agent
 description: "Generate a cash flow report for a given company and period"
 capabilities:
@@ -26,14 +27,18 @@ steps:
   - id: 1
     action: fetch-transactions
     dependsOn: []
+    outputFields: [transactions]
   - id: 2
     action: classify-transactions
     dependsOn: [1]
+    outputFields: [classifiedTransactions]
     parameters:
       ledgerType: operating
   - id: 3
     action: compute-net-flow
     dependsOn: [2]
+    outputFields: [netFlow, totalIncome, totalExpense]
   - id: 4
     action: generate-cash-flow-report
     dependsOn: [3]
+    outputFields: [report]

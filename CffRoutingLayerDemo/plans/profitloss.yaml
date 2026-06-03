@@ -1,6 +1,7 @@
 planId: pl-001
 intent: GenerateProfitLoss
 agentId: ReportingAgent
+domain: finance
 displayName: Reporting Agent
 description: "Generate a profit and loss (P&L) statement for a given period"
 capabilities:
@@ -22,19 +23,26 @@ sampleQueries:
   - "Show me the P&L for this year"
   - "I need the pnl statement for Q3"
   - "What's our net income for 2024?"
+  - "Run a P&L"
+  - "Run a P&L report"
 steps:
   - id: 1
     action: fetch-revenue
     dependsOn: []
+    outputFields: [totalRevenue]
   - id: 2
     action: fetch-expenses
     dependsOn: []
+    outputFields: [totalExpenses]
   - id: 3
     action: compute-gross-profit
     dependsOn: [1, 2]
+    outputFields: [grossProfit]
   - id: 4
     action: compute-net-income
     dependsOn: [3]
+    outputFields: [netIncome]
   - id: 5
     action: generate-pl-report
     dependsOn: [4]
+    outputFields: [report]

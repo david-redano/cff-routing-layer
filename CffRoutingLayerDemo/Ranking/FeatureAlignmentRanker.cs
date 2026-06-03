@@ -73,9 +73,16 @@ public sealed class FeatureAlignmentRanker : IPlanRanker
         var unmetCount = candidate.MismatchedFeatures.Count(f => f.StartsWith("entities:"));
         baseScore -= unmetCount * 0.15f;
 
-        // Bonus for output field relevance
+        // Bonus for output field relevance (10 %)
         var outputOverlap = ComputeOutputRelevance(candidate, intent);
-        baseScore = baseScore * 0.85f + outputOverlap * 0.15f;
+
+        // Bonus for description / sample-query text overlap (15 %)
+        // This is the primary tiebreaker: when two plans share the same feature vector
+        // (domain, action, entities, etc.) the one whose human-readable text better
+        // matches the user's wording wins.
+        var descOverlap = ComputeDescriptionRelevance(candidate, intent);
+
+        baseScore = baseScore * 0.75f + outputOverlap * 0.10f + descOverlap * 0.15f;
 
         return Math.Clamp(baseScore, 0f, 1f);
     }
@@ -88,6 +95,34 @@ public sealed class FeatureAlignmentRanker : IPlanRanker
         var queryTokens = intent.NormalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var matches = queryTokens.Count(t => t.Length > 3 && outputText.Contains(t));
         return Math.Min(1f, matches * 0.2f);
+    }
+
+    /// <summary>
+    /// Token overlap between the user query and the plan's description,
+    /// understanding, and sample queries.  Normalized to [0, 1].
+    /// </summary>
+    private static float ComputeDescriptionRelevance(CandidateResult candidate, QueryIntent intent)
+    {
+        var plan = candidate.Plan;
+
+        // Build a bag-of-words from the plan's understanding and sample queries.
+        // Description is omitted — it duplicates Understanding which comes directly from the CFF plan.
+        var corpus = string.Join(" ",
+            plan.Understanding,
+            string.Join(" ", plan.SampleQueries)
+        ).ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(corpus)) return 0.5f;
+
+        var queryTokens = intent.NormalizedQuery
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(t => t.Length > 3)
+            .ToList();
+
+        if (queryTokens.Count == 0) return 0.5f;
+
+        var matchCount = queryTokens.Count(t => corpus.Contains(t));
+        return (float)matchCount / queryTokens.Count;
     }
 
     private static string BuildExplanation(CandidateResult c)

@@ -1,8 +1,8 @@
 planId: real-061
 intent: FindRecentSalesQuoteIssue
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Find the most recent sales quote by issue date"
 capabilities:
   - sales-quotes
 understanding: "Find the most recent sales quote by issue date"
@@ -32,6 +32,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch quotes sorted by date descending"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -50,3 +51,4 @@ steps:
     functionName: buildOutput
     stepReason: "Extract most recent quote"
     dependsOn: [1]
+    outputFields: [quoteReference, customerName, quoteDate, totalAmount, currency, status, periodFrom, periodTo, periodLabel]

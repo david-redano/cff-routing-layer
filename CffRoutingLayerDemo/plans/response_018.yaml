@@ -1,8 +1,8 @@
 planId: real-018
 intent: IdentifySingleSalesOrderMonetary
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify the single sales order with the highest monetary value"
 capabilities:
   - sales-orders
 understanding: "Identify the single sales order with the highest monetary value"
@@ -32,6 +32,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch all sales orders"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -46,3 +47,4 @@ steps:
     functionName: buildOutput
     stepReason: "Find highest-value order"
     dependsOn: [1]
+    outputFields: [orderReference, customerName, orderDate, totalAmount, currency, orderStatus, periodFrom, periodTo, periodLabel]

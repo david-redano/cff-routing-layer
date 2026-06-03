@@ -1,8 +1,8 @@
 planId: real-059
 intent: CalculatePercentageTotalPurchaseInvoices
 agentId: FinancialAgent
+domain: finance
 displayName: Financial Agent
-description: "Calculate what percentage of total purchase invoices are being paid late"
 capabilities:
   - purchasing-purchase-invoices
 understanding: "Calculate what percentage of total purchase invoices are being paid late"
@@ -29,6 +29,7 @@ steps:
     toolId: "1fdd3130-df10-2250-c186-1e765c14a7d2"
     stepReason: "Fetch all purchase invoices"
     dependsOn: []
+    outputFields: [purchaseInvoices]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate late payment percentage"
     dependsOn: [1]
+    outputFields: [latePaymentPercentage, overdueInvoiceCount, totalInvoiceCount, periodFrom, periodTo, periodLabel]

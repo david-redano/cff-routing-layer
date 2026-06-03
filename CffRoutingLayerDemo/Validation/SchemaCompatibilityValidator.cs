@@ -27,37 +27,36 @@ public sealed class SchemaCompatibilityValidator : IPlanValidator
 
         foreach (var step in ordered)
         {
-            if (step.Parameters.Count == 0)
+            var stepLabel = string.IsNullOrEmpty(step.ToolName) ? step.Action : step.ToolName;
+
+            // Check which required params (InputSchema) are unmet
+            if (step.Parameters.Count > 0)
             {
-                // Track outputs even for parameter-free steps
-                foreach (var action in new[] { step.Action, step.ToolName }.Where(a => !string.IsNullOrEmpty(a)))
-                    available.Add($"output_of_{step.Id}");
-                continue;
+                var unmet = step.Parameters.Keys
+                    .Where(k => !available.Contains(k))
+                    .ToList();
+
+                if (unmet.Count > 0)
+                {
+                    // Downgrade to warning — named plans use static parameter values
+                    // (e.g. ledgerType: operating), not runtime input requirements
+                    warnings.Add($"Step {step.Id} ({stepLabel}) references " +
+                                 $"[{string.Join(", ", unmet)}] not found in preceding outputs or bindings");
+                }
             }
 
-            // Check which required params are unmet
-            var unmet = step.Parameters.Keys
-                .Where(k => !available.Contains(k))
-                .ToList();
-
-            // Check if predecessor steps produce them
-            var predOutputs = plan.Steps
-                .Where(s => step.DependsOn.Contains(s.Id))
-                .SelectMany(s => s.Parameters.Keys)     // outputs = params of dependent steps
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            var stillUnmet = unmet.Where(u => !predOutputs.Contains(u)).ToList();
-
-            if (stillUnmet.Count > 0)
+            // Add this step's declared output fields to the available set.
+            // If OutputFields is empty (plan doesn't declare them), use a sentinel so
+            // downstream steps that depend on this one are not incorrectly flagged.
+            if (step.OutputFields.Count > 0)
             {
-                // Downgrade to warning rather than error for YAML plans — parameter names
-                // may be output field names from dynamic execution steps
-                warnings.Add($"Step {step.Id} ({(string.IsNullOrEmpty(step.ToolName) ? step.Action : step.ToolName)}) " +
-                             $"references parameters not confirmed in preceding steps: [{string.Join(", ", stillUnmet)}]");
+                foreach (var field in step.OutputFields)
+                    available.Add(field);
             }
-
-            // Mark step outputs as available
-            foreach (var key in step.Parameters.Keys) available.Add(key);
+            else
+            {
+                available.Add($"output_of_{step.Id}");
+            }
         }
 
         var status = errors.Count > 0 ? ValidationStatus.Fail

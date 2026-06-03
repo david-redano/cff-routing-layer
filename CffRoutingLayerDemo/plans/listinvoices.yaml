@@ -2,6 +2,7 @@
 planId: listinvoices-001
 intent: ListInvoices
 agentId: InvoiceAgent
+domain: finance
 displayName: Invoice Agent
 description: "List all invoices for the user or a specified customer, period, or status"
 capabilities:
@@ -25,6 +26,8 @@ steps:
   - id: 1
     action: fetch-invoices
     dependsOn: []
+    outputFields: [invoices, invoiceCount]
   - id: 2
     action: render-invoice-list
     dependsOn: [1]
+    outputFields: [report]

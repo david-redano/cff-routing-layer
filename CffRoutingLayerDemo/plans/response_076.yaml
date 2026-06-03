@@ -1,8 +1,8 @@
 planId: real-076
 intent: DetermineWhetherCustomersSalesQuotes
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Determine whether any customers have sales quotes in Pending status only (no other statuses)"
 capabilities:
   - sales-quotes
 understanding: "Determine whether any customers have sales quotes in Pending status only (no other statuses)"
@@ -26,6 +26,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all pending quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: status
         value: "Pending"
@@ -43,6 +44,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all closed and declined quotes"
     dependsOn: [1]
+    outputFields: [quotes]
     input:
       - key: status
         value: "Closed"
@@ -59,3 +61,4 @@ steps:
     functionName: validateOnlyPending
     stepReason: "Identify customers with only pending quotes"
     dependsOn: [2]
+    outputFields: [hasOnlyPendingClients, clientCount, pendingQuoteCount]

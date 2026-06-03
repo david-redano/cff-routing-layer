@@ -1,8 +1,8 @@
 planId: real-098
 intent: IdentifyCustomersAcceptedSalesQuotes
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which customers have accepted the most sales quotes (converted Closed quotes to orders/invoices)"
 capabilities:
   - sales-quotes
 understanding: "Identify which customers have accepted the most sales quotes (converted Closed quotes to orders/invoices)"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all closed sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: status
         value: "Closed"
@@ -45,3 +46,4 @@ steps:
     functionName: buildOutput
     stepReason: "Group by customer, count, and build output"
     dependsOn: [1]
+    outputFields: [totalCustomers, chartedCustomers, totalAcceptedQuotes, periodFrom, periodTo, periodLabel]

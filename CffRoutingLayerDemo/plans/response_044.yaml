@@ -1,8 +1,8 @@
 planId: real-044
 intent: CheckWhetherSalesQuotesExist
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Check whether any sales quotes exist that have no monetary amount (null or zero total_amount)"
 capabilities:
   - sales-quotes
 understanding: "Check whether any sales quotes exist that have no monetary amount (null or zero total_amount)"
@@ -26,6 +26,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -40,3 +41,4 @@ steps:
     functionName: validateAmounts
     stepReason: "Validate quotes for missing amounts"
     dependsOn: [1]
+    outputFields: [hasMissingAmounts, quotesWithoutAmount, totalQuotes]

@@ -1,8 +1,8 @@
 planId: real-091
 intent: TotalCountCustomers
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "User wants to know the total count of customers"
 capabilities:
   - sales-customers
 understanding: "User wants to know the total count of customers"
@@ -22,6 +22,7 @@ steps:
     toolId: "de798796-6a20-ce1a-f686-dc224799debc"
     stepReason: "Fetch all customers"
     dependsOn: []
+    outputFields: [customers]
     input:
       - key: page_size
         value: "200"
@@ -32,3 +33,4 @@ steps:
     functionName: buildOutput
     stepReason: "Extract customer count"
     dependsOn: [1]
+    outputFields: [customerCount]

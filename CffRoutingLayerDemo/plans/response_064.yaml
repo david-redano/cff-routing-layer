@@ -1,8 +1,8 @@
 planId: real-064
 intent: FindOldestSalesQuoteIssue
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Find the oldest sales quote by issue date"
 capabilities:
   - sales-quotes
 understanding: "Find the oldest sales quote by issue date"
@@ -32,6 +32,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -46,3 +47,4 @@ steps:
     functionName: buildOutput
     stepReason: "Find oldest quote by date"
     dependsOn: [1]
+    outputFields: [quoteReference, customerName, issueDate, amount, currency, status, periodFrom, periodTo, periodLabel]

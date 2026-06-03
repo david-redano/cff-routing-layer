@@ -1,6 +1,7 @@
 planId: runway-001
 intent: ForecastCashRunway
 agentId: CashRunwayAgent
+domain: finance
 displayName: Cash Runway Agent
 description: "Forecast months of cash runway at the current burn rate"
 capabilities:
@@ -24,15 +25,20 @@ steps:
   - id: 1
     action: fetch-transactions
     dependsOn: []
+    outputFields: [transactions]
   - id: 2
     action: compute-burn-rate
     dependsOn: [1]
+    outputFields: [burnRate]
   - id: 3
     action: compute-cash-balance
     dependsOn: [1]
+    outputFields: [currentBalance]
   - id: 4
     action: forecast-runway
     dependsOn: [2, 3]
+    outputFields: [runwayMonths]
   - id: 5
     action: generate-runway-report
     dependsOn: [4]
+    outputFields: [report]

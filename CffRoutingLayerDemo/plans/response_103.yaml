@@ -1,8 +1,8 @@
 planId: real-103
 intent: CalculateAverageSalesInvoiceGrouped
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate average sales invoice amount grouped by customer type (inferred from the customer 'type' field: business = B2B, individual = B2C)"
 capabilities:
   - sales-invoices
   - sales-customers
@@ -32,6 +32,7 @@ steps:
     toolId: "f5fc423c-2544-084c-56df-09d849ac1737"
     stepReason: "Fetch all sales invoices for current FY"
     dependsOn: []
+    outputFields: [invoices]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -47,6 +48,7 @@ steps:
     toolId: "de798796-6a20-ce1a-f686-dc224799debc"
     stepReason: "Fetch all customers with type classification"
     dependsOn: [1]
+    outputFields: [customers]
     input:
       - key: page_size
         value: "200"
@@ -57,3 +59,4 @@ steps:
     functionName: buildOutput
     stepReason: "Join invoices to customers, group by B2B/B2C, calculate averages"
     dependsOn: [2]
+    outputFields: [b2BAverage, b2CAverage, b2BCount, b2CCount, currency, periodFrom, periodTo, periodLabel]

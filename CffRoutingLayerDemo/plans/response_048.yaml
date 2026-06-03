@@ -1,8 +1,8 @@
 planId: real-048
 intent: CalculatePercentageCustomersReceivedQuote
 agentId: AnalysisAgent
+domain: finance
 displayName: Analysis Agent
-description: "Calculate the percentage of customers who received a quote last quarter and then accepted another quote in the same quarter"
 capabilities:
   - analysis-aggregation
 understanding: "Calculate the percentage of customers who received a quote ${period} and then accepted another quote in the same quarter"
@@ -30,6 +30,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Aggregate quotes by customer and status for last quarter"
     dependsOn: []
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_quotes"
@@ -56,3 +57,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate repeat acceptance percentage"
     dependsOn: [1]
+    outputFields: [repeatAcceptancePercentage, uniqueCustomers, customersWithRepeatAcceptance, totalQuotes, periodFrom, periodTo, periodLabel]

@@ -21,7 +21,7 @@ public sealed class PlanIndex : IPlanIndex
     private readonly IReadOnlyList<IRetrievalFilter> _filters;
     private readonly IndexStats _stats;
 
-    public PlanIndex(IReadOnlyList<PlanDefinition> plans, ScoringWeights? weights = null)
+    public PlanIndex(IReadOnlyList<PlanDefinition> plans, IReadOnlyDictionary<string, PlanCluster>? clusters = null, ScoringWeights? weights = null)
     {
         _allPlans = plans;
         _weights  = weights ?? ScoringWeights.Default;
@@ -35,10 +35,11 @@ public sealed class PlanIndex : IPlanIndex
             new EntityFilter(),
         ];
 
+        var builtClusters = clusters ?? new ClusterBuilder().Build(plans);
         _stats = new IndexStats
         {
             PlanCount    = plans.Count,
-            ClusterCount = new ClusterBuilder().Build(plans).Count
+            ClusterCount = builtClusters.Count
         };
     }
 
@@ -132,6 +133,13 @@ public sealed class PlanIndex : IPlanIndex
         {
             score += _weights.Action * 0.7f;
             matched.Add($"action:{features.PrimaryAction} (implied)");
+        }
+        else if (intent.ActionConfidence <= 0.35f)
+        {
+            // Action was defaulted (no verb found) — treat as unknown, give neutral credit
+            // rather than a zero-score mismatch so the correct plan isn't buried
+            score += _weights.Action * 0.5f;
+            unknown.Add($"action: low confidence ({intent.ActionConfidence:P0}), plan={features.PrimaryAction} not penalised");
         }
         else
         {

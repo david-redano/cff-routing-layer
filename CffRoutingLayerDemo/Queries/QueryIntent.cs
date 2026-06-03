@@ -37,5 +37,12 @@ public sealed record QueryIntent
 
     // ─── Confidence and diagnostics ───
     public required float OverallConfidence { get; init; }
+
+    /// <summary>
+    /// Confidence that <see cref="PrimaryAction"/> was explicitly detected (vs defaulted).
+    /// ≤ 0.35 means no action verb matched — action should be treated as unknown during scoring.
+    /// </summary>
+    public required float ActionConfidence { get; init; }
+
     public required IReadOnlyList<string> ParsingNotes { get; init; }
 }

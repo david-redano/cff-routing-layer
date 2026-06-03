@@ -18,8 +18,14 @@ public sealed class PlanDefinition
     public string Intent         { get; set; } = "";
     public string AgentId        { get; set; } = "";
     public string DisplayName    { get; set; } = "";
-    public string Description    { get; set; } = "";
     public List<string> Capabilities { get; set; } = [];
+
+    /// <summary>
+    /// Explicit domain classification for this plan (e.g. "sales", "finance", "inventory", "hr").
+    /// Populated from YAML. If empty, <see cref="Index.PlanFeatureExtractor"/> infers it from
+    /// tool-naming convention and capability text.
+    /// </summary>
+    public string Domain { get; set; } = "";
 
     // ── Reasoning fields (from <Reasoning> block) ─────────────────────────
 
@@ -109,6 +115,13 @@ public sealed class YamlPlanStep
     /// <summary>ID of the next step in a linear chain (canonical format).
     /// Used to derive DependsOn when DependsOn is empty.</summary>
     public int? NextStep { get; set; }
+
+    /// <summary>
+    /// Field names this step produces as output.
+    /// Consumed by <see cref="Validation.SchemaCompatibilityValidator"/> to verify
+    /// that downstream steps can receive the inputs they need.
+    /// </summary>
+    public List<string> OutputFields { get; set; } = [];
 }
 
 /// <summary>A key/value input parameter for a canonical Tool step.</summary>

@@ -1,8 +1,8 @@
 planId: real-082
 intent: CountSalesQuotesPendingStatus
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Count the number of sales quotes with pending status"
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes with pending status"
@@ -27,6 +27,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch pending quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: status
         value: "Pending"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Count pending quotes"
     dependsOn: [1]
+    outputFields: [pendingQuoteCount, periodFrom, periodTo, periodLabel]

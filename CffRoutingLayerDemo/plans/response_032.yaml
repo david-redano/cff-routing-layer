@@ -1,8 +1,8 @@
 planId: real-032
 intent: CalculateAverageDaysInvoiceIssue
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate the average number of days from invoice issue date to payment date across all customers over the last 3 months"
 capabilities:
   - sales-invoices
   - sales-get-invoice
@@ -29,6 +29,7 @@ steps:
     toolId: "f5fc423c-2544-084c-56df-09d849ac1737"
     stepReason: "Fetch paid invoices last 3 months"
     dependsOn: []
+    outputFields: [invoices]
     input:
       - key: status
         value: "[\"Collected\"]"
@@ -45,3 +46,4 @@ steps:
     functionName: calculateDSO
     stepReason: "Calculate average days to collect"
     dependsOn: [1]
+    outputFields: [averageDaysToCollect, invoiceCount, periodFrom, periodTo, periodLabel]

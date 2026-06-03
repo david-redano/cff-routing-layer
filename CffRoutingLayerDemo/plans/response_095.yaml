@@ -1,8 +1,8 @@
 planId: real-095
 intent: CountSalesQuotesDeclinedStatus
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Count the number of sales quotes with Declined status"
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes with Declined status"
@@ -27,6 +27,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch declined sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: status
         value: "Declined"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Count declined quotes and build output"
     dependsOn: [1]
+    outputFields: [rejectedQuoteCount, periodFrom, periodTo, periodLabel]

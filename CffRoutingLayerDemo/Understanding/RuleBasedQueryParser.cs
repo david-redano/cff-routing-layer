@@ -72,6 +72,7 @@ public sealed class RuleBasedQueryParser : IQueryParser
             ExpectedOutput    = outputFmt,
             SubIntents        = [],
             OverallConfidence = confidence,
+            ActionConfidence  = action.Confidence,
             ParsingNotes      = []
         };
 

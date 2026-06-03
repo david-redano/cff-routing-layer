@@ -1,8 +1,8 @@
 planId: real-088
 intent: CheckWhetherSalesQuotesWere
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Check whether any sales quotes were created on February 10, 2026"
 capabilities:
   - sales-quotes
 understanding: "Check whether any sales quotes were created on ${date}"
@@ -26,6 +26,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch quotes for February 10, 2026"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-02-10"
@@ -40,3 +41,4 @@ steps:
     functionName: validateQuotes
     stepReason: "Validate quote existence"
     dependsOn: [1]
+    outputFields: [quoteExists, quoteCount, queryDate]

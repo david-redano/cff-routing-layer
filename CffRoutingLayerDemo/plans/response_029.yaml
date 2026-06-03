@@ -1,8 +1,8 @@
 planId: real-029
 intent: RetrieveCompleteDetailsSalesOrder
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Retrieve complete details for sales order number 0003"
 capabilities:
   - sales-orders
   - sales-get-order
@@ -31,6 +31,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Search for sales order 0003"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: date_from
         value: "2025-06-01"
@@ -45,6 +46,7 @@ steps:
     functionName: validateOrder
     stepReason: "Validate single order match by reference"
     dependsOn: [1]
+    outputFields: [step2Result]
     nextStep: 3
   - id: 3
     action: sales-get-sales-order
@@ -53,6 +55,7 @@ steps:
     toolId: "bb53c0b2-0434-0479-4f19-6756b0002ab3"
     stepReason: "Fetch complete sales order details"
     dependsOn: [2]
+    outputFields: [order]
     input:
       - key: sales_order_id
         value: "$.Step2.OrderId"
@@ -63,3 +66,4 @@ steps:
     functionName: buildOutput
     stepReason: "Build order details table output"
     dependsOn: [3]
+    outputFields: [orderReference, customerName, orderDate, status, totalAmount, currency, lineItemCount]

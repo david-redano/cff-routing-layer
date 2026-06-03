@@ -1,6 +1,7 @@
 planId: tax-001
 intent: EstimateTaxLiability
 agentId: TaxAgent
+domain: finance
 displayName: Tax Agent
 description: "Estimate tax liability for a given year and entity type"
 capabilities:
@@ -27,12 +28,16 @@ steps:
   - id: 1
     action: fetch-taxable-income
     dependsOn: []
+    outputFields: [taxableIncome]
   - id: 2
     action: apply-deductions
     dependsOn: [1]
+    outputFields: [deductions, adjustedIncome]
   - id: 3
     action: compute-tax-liability
     dependsOn: [2]
+    outputFields: [taxLiability, effectiveRate]
   - id: 4
     action: generate-tax-estimate-report
     dependsOn: [3]
+    outputFields: [report]

@@ -1,8 +1,8 @@
 planId: real-042
 intent: IdentifyCustomersRankedPaymentPunctuality
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify the top customers ranked by their payment punctuality — those who consistently pay invoices by the due date"
 capabilities:
   - sales-invoices
 understanding: "Identify the top customers ranked by their payment punctuality — those who consistently pay invoices by the due date"
@@ -27,6 +27,7 @@ steps:
     toolId: "f5fc423c-2544-084c-56df-09d849ac1737"
     stepReason: "Fetch all paid invoices"
     dependsOn: []
+    outputFields: [invoices]
     input:
       - key: status
         value: "Paid"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Rank customers by on-time payment consistency"
     dependsOn: [1]
+    outputFields: [totalCustomers, topCustomersDisplayed, onTimePaymentRate, currency]

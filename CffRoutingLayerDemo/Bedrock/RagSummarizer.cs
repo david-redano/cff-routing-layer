@@ -90,7 +90,7 @@ public sealed class RagSummarizer : IDisposable
             Period: {period}
             Revenue: {revenue:C}
             COGS (est. 20%): {cogs:C}
-            Gross Profit: {gross:C} ({(gross / revenue * 100):F1}% margin)
+            Gross Profit: {gross:C} ({(revenue > 0 ? gross / revenue * 100 : 0m):F1}% margin)
             Total Operating Expenses: {expenses:C}
             Net Income: {netIncome:+$#,##0.00;-$#,##0.00}
 

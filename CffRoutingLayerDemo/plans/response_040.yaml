@@ -1,8 +1,8 @@
 planId: real-040
 intent: IdentifyCustomerClosingRateRatio
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which customer has the lowest closing rate (ratio of closed/converted quotes to total quotes)"
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the lowest closing rate (ratio of closed/converted quotes to total quotes)"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2025-06-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate closing rate per customer, identify worst"
     dependsOn: [1]
+    outputFields: [worstCustomerName, worstCustomerId, worstClosingRate, tieCount, totalCustomersAnalyzed, totalQuotesAnalyzed]

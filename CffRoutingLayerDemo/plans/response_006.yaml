@@ -1,8 +1,8 @@
 planId: real-006
 intent: CompareTotalSalesOrderAmounts
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Compare total sales order amounts between March and April"
 capabilities:
   - sales-orders
 understanding: "Compare total sales order amounts ${period}"
@@ -30,6 +30,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch March sales orders"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: date_from
         value: "2026-03-01"
@@ -45,6 +46,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch April sales orders"
     dependsOn: [1]
+    outputFields: [orders]
     input:
       - key: date_from
         value: "2026-04-01"
@@ -59,3 +61,4 @@ steps:
     functionName: buildOutput
     stepReason: "Compare March and April totals"
     dependsOn: [2]
+    outputFields: [marchTotal, aprilTotal, difference, percentageChange, currency, marchOrderCount, aprilOrderCount]

@@ -1,8 +1,8 @@
 planId: real-027
 intent: CalculatePercentageTotalSalesInvoices
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate what percentage of total sales invoices were paid after their due date"
 capabilities:
   - sales-invoices
 understanding: "Calculate what percentage of total sales invoices were paid after their due date"
@@ -29,6 +29,7 @@ steps:
     toolId: "f5fc423c-2544-084c-56df-09d849ac1737"
     stepReason: "Fetch all sales invoices"
     dependsOn: []
+    outputFields: [invoices]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate late payment percentage"
     dependsOn: [1]
+    outputFields: [latePaymentPercentage, latePaymentCount, totalPaidInvoices, periodFrom, periodTo, periodLabel]

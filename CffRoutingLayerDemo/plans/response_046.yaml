@@ -1,8 +1,8 @@
 planId: real-046
 intent: IdentifyProductsPercentageQuotesContaining
 agentId: AnalysisAgent
+domain: finance
 displayName: Analysis Agent
-description: "Identify which products have the highest percentage of quotes containing them that were accepted and converted to orders"
 capabilities:
   - sales-quotes
   - analysis-aggregation
@@ -30,6 +30,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Count closed quotes by product"
     dependsOn: []
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_quotes"
@@ -61,6 +62,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Count total quotes by product"
     dependsOn: [1]
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_quotes"
@@ -89,3 +91,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate acceptance rate and build output"
     dependsOn: [2]
+    outputFields: [totalProducts, topProducts, highestAcceptanceRate, periodFrom, periodTo, periodLabel]

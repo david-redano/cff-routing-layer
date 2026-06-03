@@ -1,8 +1,8 @@
 planId: real-011
 intent: IdentifyCustomersOrderedIphonesFrequently
 agentId: AnalysisAgent
+domain: finance
 displayName: Analysis Agent
-description: "Identify which customers have ordered iPhones most frequently"
 capabilities:
   - analysis-aggregation
 understanding: "Identify which customers have ordered ${itemDescription} most frequently"
@@ -24,6 +24,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Aggregate iPhone orders by customer"
     dependsOn: []
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_orders"
@@ -50,3 +51,4 @@ steps:
     functionName: buildOutput
     stepReason: "Build chart and table output"
     dependsOn: [1]
+    outputFields: [totalCustomers, topCustomerOrderCount, currency]

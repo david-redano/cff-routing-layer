@@ -1,8 +1,8 @@
 planId: real-075
 intent: DetermineWhetherCustomersSalesQuotes
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Determine whether any customers have sales quotes with a status of Closed only (no other statuses)"
 capabilities:
   - sales-quotes
 understanding: "Determine whether any customers have sales quotes with a status of Closed only (no other statuses)"
@@ -29,6 +29,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-04-01"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Validate customers with Closed-only quotes"
     dependsOn: [1]
+    outputFields: [hasClosedOnlyCustomers, customerCount, totalQuotes, periodFrom, periodTo, periodLabel]

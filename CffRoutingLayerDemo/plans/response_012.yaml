@@ -1,8 +1,8 @@
 planId: real-012
 intent: IdentifyCustomersSalesOrdersPending
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which customers have sales orders with pending status"
 capabilities:
   - sales-orders
 understanding: "Identify which customers have sales orders with pending status"
@@ -27,6 +27,7 @@ steps:
     toolId: "38de4b32-92d4-de8f-4d9b-40d61c39b7c6"
     stepReason: "Fetch all draft sales orders"
     dependsOn: []
+    outputFields: [orders]
     input:
       - key: status
         value: "draft"
@@ -43,3 +44,4 @@ steps:
     functionName: buildOutput
     stepReason: "Extract customer orders and build table"
     dependsOn: [1]
+    outputFields: [customerCount, orderCount, totalPendingValue, currency]

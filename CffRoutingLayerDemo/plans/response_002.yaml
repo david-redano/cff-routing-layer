@@ -1,8 +1,8 @@
 planId: real-002
 intent: IdentifyCustomerTotalQuotedSales
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which customer has the lowest total quoted amount across all sales quotes"
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the lowest total quoted amount across all sales quotes"
@@ -31,6 +31,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2025-06-01"
@@ -45,3 +46,4 @@ steps:
     functionName: buildOutput
     stepReason: "Group by customer, sort ascending, build output"
     dependsOn: [1]
+    outputFields: [totalCustomers, displayedCustomers, lowestSpender, lowestAmount, currency, periodFrom, periodTo, periodLabel]

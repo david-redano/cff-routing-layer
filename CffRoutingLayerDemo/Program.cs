@@ -28,7 +28,8 @@ var plans = Directory.Exists(plansDir)
     ? PlanLoader.LoadFromDirectory(plansDir)
     : Array.Empty<PlanDefinition>();
 
-var planIndex = new PlanIndex(plans);
+var clusters  = new ClusterBuilder().Build(plans);
+var planIndex = new PlanIndex(plans, clusters);
 
 // Load demo scenarios from benchmark YAMLs
 DemoScenarios.LoadFromBenchmarks(benchmarkFile);
@@ -57,7 +58,7 @@ RagSummarizer? ragSummarizer = (config.UseBedrockRag && bedrockHelper is not nul
 var executor      = new PlanExecutor(dataStore, ragSummarizer);
 var stats         = new SessionStats();
 
-var pipeline = new PlanRoutingPipeline(queryParser, planIndex, ranker, validator, executor);
+var pipeline = new PlanRoutingPipeline(queryParser, planIndex, ranker, validator);
 
 // Streaming fallback (used for unknown intents)
 var streaming = new BedrockStreamingConversation(config);
@@ -142,7 +143,7 @@ while (!cts.IsCancellationRequested)
             continue;
 
         case "demo":
-            await RunDemoScenariosAsync(pipeline, streaming, history, config, stats, cts.Token);
+            await RunDemoScenariosAsync(pipeline, streaming, history, config, stats, executor, cts.Token);
             continue;
     }
 
@@ -153,17 +154,17 @@ while (!cts.IsCancellationRequested)
     try
     {
         var convCtx = BuildConversationContext(history);
-        var (result, decision) = await pipeline.HandleAsync(trimmed, "DEMO-001", convCtx, cts.Token);
-        var elapsed = DateTime.UtcNow - started;
+        var decision = await pipeline.RouteAsync(trimmed, convCtx, cts.Token);
+        var elapsed  = DateTime.UtcNow - started;
 
         var intent  = decision.SelectedPlan?.Plan.Intent ?? decision.Status.ToString();
         var agentId = decision.SelectedPlan?.Plan.AgentId ?? "";
         stats.RecordQuery(fromCache: false, (long)elapsed.TotalMilliseconds, intent);
         ConsoleRenderer.PrintMetrics(elapsed, cached: false);
 
-        if (decision.Status == RoutingStatus.Rejected || decision.Status == RoutingStatus.NoPlanFound)
+        if (decision.Status == RoutingStatus.Rejected)
         {
-            // Streaming fallback for unmatched queries
+            // Streaming fallback for queries the parser couldn't understand at all
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             Console.WriteLine("  [Fallback] Routing to streaming conversation...");
             Console.ResetColor();
@@ -182,16 +183,35 @@ while (!cts.IsCancellationRequested)
                 AssistantResponse: streamResult,
                 WasStreamed:       true));
         }
-        else if (decision.Status == RoutingStatus.Success)
+        else if (decision.Status == RoutingStatus.NoPlanFound ||
+                 decision.Status == RoutingStatus.LowConfidence)
         {
+            // No matching plan — explain what the system can do instead
+            const string NoMatchMsg =
+                "I’m sorry, I don’t know how to help with that. " +
+                "I can assist with financial reports, invoices, cash flow, tax calculations, " +
+                "profit & loss statements, reconciliations, and similar accounting tasks.";
+            ConsoleRenderer.PrintResult(NoMatchMsg, fromCache: false);
+            history.AddTurn(new ConversationTurn(
+                Timestamp:         DateTime.UtcNow,
+                UserMessage:       trimmed,
+                NormalizedMessage: trimmed,
+                ExtractedEntities: new Dictionary<string, string>(),
+                Intent:            "NoMatch",
+                AgentId:           "",
+                AssistantResponse: NoMatchMsg,
+                WasStreamed:       false));
+        }
+        else if (decision.Status == RoutingStatus.Success && decision.SelectedPlan is not null)
+        {
+            var result = await ExecuteSelectedPlanAsync(decision.SelectedPlan, trimmed, executor, cts.Token);
             ConsoleRenderer.PrintResult(result, fromCache: false);
             history.AddTurn(new ConversationTurn(
                 Timestamp:         DateTime.UtcNow,
                 UserMessage:       trimmed,
                 NormalizedMessage: trimmed,
-                ExtractedEntities: decision.SelectedPlan?.SlotBindings
-                    .ToDictionary(b => b.SlotName, b => b.Value)
-                    ?? new Dictionary<string, string>(),
+                ExtractedEntities: decision.SelectedPlan.SlotBindings
+                    .ToDictionary(b => b.SlotName, b => b.Value),
                 Intent:            intent,
                 AgentId:           agentId,
                 AssistantResponse: result,
@@ -200,7 +220,7 @@ while (!cts.IsCancellationRequested)
         else
         {
             Console.ForegroundColor = ConsoleColor.DarkYellow;
-            Console.WriteLine($"  {result}");
+            Console.WriteLine($"  {decision.Message}");
             Console.ResetColor();
         }
     }
@@ -256,6 +276,54 @@ static ConversationContext? BuildConversationContext(ConversationHistory history
     };
 }
 
+static async Task<string> ExecuteSelectedPlanAsync(
+    SelectedPlan  selected,
+    string        rawQuery,
+    PlanExecutor  executor,
+    CancellationToken ct)
+{
+    Console.ForegroundColor = ConsoleColor.DarkGray;
+    Console.WriteLine($"  ► Execute  Running plan {selected.Plan.PlanId}...");
+    Console.ResetColor();
+
+    var entities = selected.SlotBindings.ToDictionary(
+        b => b.SlotName, b => b.Value, StringComparer.OrdinalIgnoreCase);
+
+    var routingCtx = new RoutingContext(
+        RequestId:   Guid.NewGuid().ToString(),
+        UserMessage: rawQuery,
+        CompanyId:   "DEMO-001",
+        Timestamp:   DateTime.UtcNow,
+        Entities:    entities);
+
+    var steps = selected.Plan.Steps.Select(s => new PlanStep(
+        StepId:    s.Id,
+        Action:    string.IsNullOrEmpty(s.ToolName) ? s.Action : s.ToolName,
+        Input:     MergeParameters(s.Parameters, entities),
+        DependsOn: s.DependsOn.ToArray()
+    )).ToList();
+
+    var executionPlan = new ExecutionPlan(
+        PlanId: $"{selected.Plan.PlanId}-{routingCtx.RequestId[..8]}",
+        Intent: selected.Plan.Intent,
+        Steps:  steps);
+
+    return await executor.ExecuteAsync(executionPlan, routingCtx, ct);
+}
+
+static Dictionary<string, string> MergeParameters(
+    Dictionary<string, string> stepParams,
+    Dictionary<string, string> entities)
+{
+    var merged = new Dictionary<string, string>(stepParams, StringComparer.OrdinalIgnoreCase);
+    foreach (var (k, v) in entities)
+    {
+        if (!merged.ContainsKey(k))
+            merged[k] = v;
+    }
+    return merged;
+}
+
 // ── Demo scenarios runner ─────────────────────────────────────────────────────
 static async Task RunDemoScenariosAsync(
     PlanRoutingPipeline pipeline,
@@ -263,6 +331,7 @@ static async Task RunDemoScenariosAsync(
     ConversationHistory history,
     AppConfig config,
     SessionStats stats,
+    PlanExecutor executor,
     CancellationToken ct)
 {
     Console.ForegroundColor = ConsoleColor.Cyan;
@@ -296,8 +365,8 @@ static async Task RunDemoScenariosAsync(
             try
             {
                 var convCtx = BuildConversationContext(scenarioHistory);
-                var (result, decision) = await pipeline.HandleAsync(turn.UserMessage, "DEMO-001", convCtx, ct);
-                var elapsed = DateTime.UtcNow - start;
+                var decision = await pipeline.RouteAsync(turn.UserMessage, convCtx, ct);
+                var elapsed  = DateTime.UtcNow - start;
 
                 if (decision.Status == RoutingStatus.Rejected || decision.Status == RoutingStatus.NoPlanFound)
                 {
@@ -312,8 +381,9 @@ static async Task RunDemoScenariosAsync(
                         AssistantResponse: streamResult,
                         WasStreamed:       true));
                 }
-                else if (decision.Status == RoutingStatus.Success)
+                else if (decision.Status == RoutingStatus.Success && decision.SelectedPlan is not null)
                 {
+                    var result = await ExecuteSelectedPlanAsync(decision.SelectedPlan, turn.UserMessage, executor, ct);
                     ConsoleRenderer.PrintResult(result, fromCache: false);
                 }
 

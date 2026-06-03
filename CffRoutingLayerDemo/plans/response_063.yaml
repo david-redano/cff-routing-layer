@@ -1,8 +1,8 @@
 planId: real-063
 intent: ShowTotalSpendingExpenseCategories
 agentId: AccountingAgent
+domain: finance
 displayName: Accounting Agent
-description: "Show total spending across all expense categories"
 capabilities:
   - accounting-get-income-statement-es
 understanding: "Show total spending across all expense categories"
@@ -27,6 +27,7 @@ steps:
     toolId: "efcc4b47-875c-ffc0-3a17-21267e7e64b4"
     stepReason: "Fetch income statement with expense categories"
     dependsOn: []
+    outputFields: [incomeStatementEs]
     input:
       - key: end_date
         value: "2026-06-01"
@@ -37,3 +38,4 @@ steps:
     functionName: buildOutput
     stepReason: "Extract expenses, group by category, build output"
     dependsOn: [1]
+    outputFields: [totalSpent, categoryCount, currency, periodFrom, periodTo, periodLabel]

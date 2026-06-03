@@ -1,8 +1,8 @@
 planId: real-053
 intent: IdentifyCustomerPendingSalesQuotes
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which customer has the highest number of pending sales quotes"
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the highest number of pending sales quotes"
@@ -26,6 +26,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all pending quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: status
         value: "Pending"
@@ -42,3 +43,4 @@ steps:
     functionName: buildOutput
     stepReason: "Group by customer and identify top"
     dependsOn: [1]
+    outputFields: [topCustomerName, pendingQuoteCount, totalPendingQuotes]

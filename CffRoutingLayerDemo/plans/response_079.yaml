@@ -1,8 +1,8 @@
 planId: real-079
 intent: CalculateAverageInvoiceCustomerInvoices
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Calculate the average invoice amount per customer across all invoices"
 capabilities:
   - sales-invoices
 understanding: "Calculate the average invoice amount per customer across all invoices"
@@ -30,6 +30,7 @@ steps:
     toolId: "f5fc423c-2544-084c-56df-09d849ac1737"
     stepReason: "Fetch all sales invoices"
     dependsOn: []
+    outputFields: [invoices]
     input:
       - key: date_from
         value: "2026-01-01"
@@ -44,3 +45,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate average amount per customer"
     dependsOn: [1]
+    outputFields: [averageAmountPerCustomer, totalInvoices, totalCustomers, currency, periodFrom, periodTo, periodLabel]

@@ -1,8 +1,8 @@
 planId: real-057
 intent: CountSalesQuotesCreatedDuring
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Count the number of sales quotes created during March 2026"
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes created ${period} ${year}"
@@ -27,6 +27,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch quotes created in March 2026"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2026-03-01"
@@ -41,3 +42,4 @@ steps:
     functionName: buildOutput
     stepReason: "Count quotes and build output"
     dependsOn: [1]
+    outputFields: [quoteCount, periodFrom, periodTo, periodLabel]

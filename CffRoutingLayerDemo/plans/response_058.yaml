@@ -1,8 +1,8 @@
 planId: real-058
 intent: IdentifyCustomersHigherPercentageQuotes
 agentId: SalesAgent
+domain: sales
 displayName: Sales Agent
-description: "Identify which customers have a higher percentage of their quotes approved (converted/closed) versus total quotes"
 capabilities:
   - sales-quotes
 understanding: "Identify which customers have a higher percentage of their quotes approved (converted/closed) versus total quotes"
@@ -27,6 +27,7 @@ steps:
     toolId: "f67362e0-4705-ab74-b046-eb8a28347b80"
     stepReason: "Fetch all sales quotes"
     dependsOn: []
+    outputFields: [quotes]
     input:
       - key: date_from
         value: "2025-06-01"
@@ -41,3 +42,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate approval rate by customer"
     dependsOn: [1]
+    outputFields: [totalCustomers, chartedCustomers, highestApprovalRate, currency]

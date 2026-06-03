@@ -1,8 +1,8 @@
 planId: real-039
 intent: IdentifyCustomerClosingRateConverted
 agentId: AnalysisAgent
+domain: finance
 displayName: Analysis Agent
-description: "Identify which customer has the highest closing rate (converted quotes divided by total quotes)"
 capabilities:
   - analysis-aggregation
 understanding: "Identify which customer has the highest closing rate (converted quotes divided by total quotes)"
@@ -28,6 +28,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Count closed quotes by customer"
     dependsOn: []
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_quotes"
@@ -53,6 +54,7 @@ steps:
     toolId: "6d8e4f2a-9b1c-4e7d-8a3f-2c5d9f1b7e4a"
     stepReason: "Count all quotes by customer"
     dependsOn: [1]
+    outputFields: [entity]
     input:
       - key: entity
         value: "sales_quotes"
@@ -75,3 +77,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate closing rate and identify top customer"
     dependsOn: [2]
+    outputFields: [topCustomerName, topCustomerId, topClosingRate, tieCount, totalCustomersAnalyzed]

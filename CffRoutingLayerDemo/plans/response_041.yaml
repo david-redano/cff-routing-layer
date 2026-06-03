@@ -1,8 +1,8 @@
 planId: real-041
 intent: CalculatePercentageUnpaidInvoicesPending
 agentId: FinancialAgent
+domain: finance
 displayName: Financial Agent
-description: "Calculate what percentage of unpaid invoices (pending to pay) are overdue"
 capabilities:
   - purchasing-purchase-invoices
 understanding: "Calculate what percentage of unpaid invoices (pending to pay) are overdue"
@@ -26,6 +26,7 @@ steps:
     toolId: "1fdd3130-df10-2250-c186-1e765c14a7d2"
     stepReason: "Fetch unpaid purchase invoices"
     dependsOn: []
+    outputFields: [purchaseInvoices]
     input:
       - key: status
         value: "Partially_paid"
@@ -42,3 +43,4 @@ steps:
     functionName: buildOutput
     stepReason: "Calculate overdue percentage"
     dependsOn: [1]
+    outputFields: [overduePercentage, overdueCount, totalUnpaidCount]
