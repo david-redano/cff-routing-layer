@@ -29,6 +29,10 @@ public sealed class DomainDictionary
         ["payroll"]      = [("finance", "payroll")],
         ["vendor"]       = [("finance", "invoicing")],
         ["anomaly"]      = [("finance", "audit")],
+        ["income"]        = [("finance", "reporting")],
+        ["net income"]    = [("finance", "reporting")],
+        ["net profit"]    = [("finance", "reporting")],
+        ["earnings"]      = [("finance", "reporting")],
         ["sales"]        = [("sales", "orders")],
         ["order"]        = [("sales", "orders")],
         ["customer"]     = [("sales", "crm")],
@@ -37,9 +41,27 @@ public sealed class DomainDictionary
         ["payroll"]      = [("hr", "payroll")],
     };
 
+    // Compound phrases scored at weight 2 — they override single-keyword ties.
+    // E.g. "sales invoice" beats a lone "invoice" pointing to finance.
+    private static readonly (string Phrase, string Domain, string SubDomain)[] PhraseMap =
+    [
+        ("sales invoice",  "sales", "invoicing"),
+        ("sales order",    "sales", "orders"),
+        ("purchase order", "finance", "invoicing"),
+    ];
+
     public (string Domain, string SubDomain, float Confidence) Classify(string text)
     {
         var scores = new Dictionary<(string, string), int>();
+
+        // Compound phrases carry weight 2 and are checked first so they can
+        // decisively beat a single-keyword match pointing to a different domain.
+        foreach (var (phrase, domain, subDomain) in PhraseMap)
+        {
+            if (!text.Contains(phrase, StringComparison.OrdinalIgnoreCase)) continue;
+            var key = (domain, subDomain);
+            scores[key] = scores.GetValueOrDefault(key) + 2;
+        }
 
         foreach (var (keyword, domains) in KeywordMap)
         {

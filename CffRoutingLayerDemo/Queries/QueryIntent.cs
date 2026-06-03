@@ -44,5 +44,12 @@ public sealed record QueryIntent
     /// </summary>
     public required float ActionConfidence { get; init; }
 
+    /// <summary>
+    /// One-sentence explanation of the classification decision (from LLM).
+    /// Populated by LlmQueryParser; empty string when rule-based fallback is used.
+    /// Enables audit trails and debugging.
+    /// </summary>
+    public required string Reasoning { get; init; }
+
     public required IReadOnlyList<string> ParsingNotes { get; init; }
 }

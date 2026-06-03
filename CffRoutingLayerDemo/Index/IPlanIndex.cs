@@ -14,10 +14,13 @@ public sealed record IndexStats
 public interface IPlanIndex
 {
     /// <summary>
-    /// Retrieves candidate plans that are structurally compatible with the query intent.
-    /// Returns plans ordered by feature alignment score (deterministic, no LLM).
+    /// Retrieves candidate plans compatible with the query intent, ordered by score.
+    /// Implementations may be synchronous (structural index) or asynchronous (hybrid embedding).
     /// </summary>
-    IReadOnlyList<CandidateResult> Retrieve(QueryIntent intent, int maxCandidates = 5);
+    Task<IReadOnlyList<CandidateResult>> RetrieveAsync(
+        QueryIntent intent,
+        int maxCandidates = 10,
+        CancellationToken ct = default);
 
     IndexStats GetStats();
 }

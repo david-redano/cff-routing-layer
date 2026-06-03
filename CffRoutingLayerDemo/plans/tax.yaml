@@ -24,6 +24,9 @@ sampleQueries:
   - "How much tax do we owe for 2024?"
   - "Calculate our tax liability for this year"
   - "What's the estimated tax for an LLC in 2024?"
+  - "What's our tax situation for this year?"
+  - "What is our tax exposure for 2024?"
+  - "How much do we owe in taxes?"
 steps:
   - id: 1
     action: fetch-taxable-income

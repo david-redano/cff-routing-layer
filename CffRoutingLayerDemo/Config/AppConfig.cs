@@ -48,6 +48,14 @@ public sealed class AppConfig
     public bool UseLlmRanker { get; init; } = false;
 
     /// <summary>
+    /// When true, use hybrid embedding + metadata retrieval (Phase 1).
+    /// Requires Bedrock credentials; plan embeddings are pre-computed at startup (~10-15s).
+    /// When false, uses the structural filter-based index (no network calls).
+    /// Default: false (safe for local runs without AWS credentials).
+    /// </summary>
+    public bool UseHybridRetrieval { get; init; } = false;
+
+    /// <summary>
     /// When true, final plan-report steps call Claude via <see cref="CffRoutingLayerDemo.Bedrock.RagSummarizer"/>
     /// to narrate the retrieved financial data (RAG loop).
     /// When false, a local formatter generates the report without a Bedrock call.
@@ -72,6 +80,7 @@ public sealed class AppConfig
         EmbeddingModelId        = Env("EMBEDDING_MODEL_ID",        "amazon.titan-embed-text-v2:0"),
         UseLlmQueryParser       = Bool("USE_LLM_QUERY_PARSER",     false),
         UseLlmRanker            = Bool("USE_LLM_RANKER",           false),
+        UseHybridRetrieval      = Bool("USE_HYBRID_RETRIEVAL",     false),
         UseBedrockRag           = Bool("USE_BEDROCK_RAG",          false),
         RewriterContextTurns    = Int("REWRITER_CONTEXT_TURNS",    4),
     };

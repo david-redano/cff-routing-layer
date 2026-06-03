@@ -1,16 +1,11 @@
-// Understanding/LlmQueryParser.cs
-namespace CffRoutingLayerDemo.Understanding;
-
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
-using CffRoutingLayerDemo.Bedrock;
 using CffRoutingLayerDemo.Queries;
+using CffRoutingLayerDemo.Bedrock;
 
-/// <summary>
-/// LLM-backed query parser using Amazon Bedrock (Claude).
-/// This is the only place in Layer 1 where a network call occurs.
-/// Extracts structured QueryIntent from free-text user input.
-/// </summary>
+namespace CffRoutingLayerDemo.Understanding;
+
 public sealed class LlmQueryParser : IQueryParser
 {
     private readonly BedrockLlmHelper _bedrock;
@@ -114,6 +109,7 @@ public sealed class LlmQueryParser : IQueryParser
         var subDomain      = root.GetStringOrDefault("subDomain") ?? "unknown";
         var domainConf     = root.GetFloatOrDefault("domainConfidence");
         var confidence     = root.GetFloatOrDefault("confidence");
+        var reasoning      = root.GetStringOrDefault("reasoning") ?? "";
         var expectedOutput = Enum.TryParse<OutputFormat>(root.GetStringOrDefault("expectedOutput"), true, out var of) ? of : OutputFormat.Summary;
 
         var slots = new List<QuerySlot>();
@@ -186,6 +182,7 @@ public sealed class LlmQueryParser : IQueryParser
             SubIntents        = [],
             OverallConfidence = confidence,
             ActionConfidence  = 1.0f,   // LLM explicitly classified the action
+            Reasoning         = reasoning,
             ParsingNotes      = []
         };
     }

@@ -43,7 +43,14 @@ public sealed class PlanIndex : IPlanIndex
         };
     }
 
-    public IReadOnlyList<CandidateResult> Retrieve(QueryIntent intent, int maxCandidates = 5)
+    public Task<IReadOnlyList<CandidateResult>> RetrieveAsync(
+        QueryIntent intent,
+        int maxCandidates = 10,
+        CancellationToken ct = default)
+        => Task.FromResult(Retrieve(intent, maxCandidates));
+
+    // Kept internal for use by RetrieveAsync and tests.
+    internal IReadOnlyList<CandidateResult> Retrieve(QueryIntent intent, int maxCandidates = 10)
     {
         var candidates = _allPlans.AsEnumerable();
 
@@ -99,6 +106,14 @@ public sealed class PlanIndex : IPlanIndex
         {
             score += _weights.Domain * 0.5f;
             unknown.Add($"domain:general (plan is domain-agnostic)");
+        }
+        else if (intent.DomainConfidence < 0.4f)
+        {
+            // Domain classifier was uncertain — don't hard-penalise plans whose
+            // domain differs from the weakly-inferred one.  Partial credit keeps
+            // them in the candidate pool so the ranker can decide.
+            score += _weights.Domain * 0.4f;
+            unknown.Add($"domain: uncertain ({intent.DomainConfidence:P0}), plan={features.Domain}");
         }
         else
         {

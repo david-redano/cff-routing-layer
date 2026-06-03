@@ -42,7 +42,8 @@ public sealed class PlanFeatureExtractor
             SupportsDateRange      = allParamKeys.Any(k =>
                                          k.Contains("date", StringComparison.OrdinalIgnoreCase) ||
                                          k.Contains("period", StringComparison.OrdinalIgnoreCase) ||
-                                         k.Contains("start", StringComparison.OrdinalIgnoreCase)),
+                                         k.Contains("start", StringComparison.OrdinalIgnoreCase) ||
+                                         k.Equals("year", StringComparison.OrdinalIgnoreCase)),
             SupportsPointInTime    = allParamKeys.Any(k =>
                                          k.Contains("asof", StringComparison.OrdinalIgnoreCase) ||
                                          k.Contains("pointintime", StringComparison.OrdinalIgnoreCase)),
@@ -140,6 +141,8 @@ public sealed class PlanFeatureExtractor
         var intent = plan.Intent.ToLowerInvariant();
         if (intent.Contains("generate") || intent.Contains("compute") || intent.Contains("calculate"))
             return DomainAction.Compute;
+        if (intent.Contains("create") || intent.Contains("send") || intent.Contains("issue") || intent.Contains("build"))
+            return DomainAction.Create;
         if (intent.Contains("list") || intent.Contains("get") || intent.Contains("show"))
             return DomainAction.List;
 
@@ -207,7 +210,7 @@ public sealed class PlanFeatureExtractor
     private static TemporalScopeType InferTemporalScope(IReadOnlySet<string> paramKeys)
     {
         var lower = paramKeys.Select(k => k.ToLowerInvariant()).ToList();
-        if (lower.Any(k => k.Contains("start") || k.Contains("end") || k.Contains("period")))
+        if (lower.Any(k => k.Contains("start") || k.Contains("end") || k.Contains("period") || k == "year"))
             return TemporalScopeType.BoundedPeriod;
         if (lower.Any(k => k.Contains("asof") || k.Contains("pointintime")))
             return TemporalScopeType.PointInTime;

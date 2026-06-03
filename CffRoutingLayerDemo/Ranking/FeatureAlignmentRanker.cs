@@ -98,31 +98,74 @@ public sealed class FeatureAlignmentRanker : IPlanRanker
     }
 
     /// <summary>
-    /// Token overlap between the user query and the plan's description,
-    /// understanding, and sample queries.  Normalized to [0, 1].
+    /// Normalized Levenshtein similarity between the query and the plan's best sample query.
+    /// This replaces the old token-overlap approach, which failed on semantically equivalent
+    /// but lexically different queries (e.g. "percentage of invoices paid late" vs
+    /// "Calculate what percentage of total sales invoices were paid after their due date").
+    /// Edit distance captures surface similarity even with different word choices.
     /// </summary>
     private static float ComputeDescriptionRelevance(CandidateResult candidate, QueryIntent intent)
     {
         var plan = candidate.Plan;
 
-        // Build a bag-of-words from the plan's understanding and sample queries.
-        // Description is omitted — it duplicates Understanding which comes directly from the CFF plan.
-        var corpus = string.Join(" ",
-            plan.Understanding,
-            string.Join(" ", plan.SampleQueries)
-        ).ToLowerInvariant();
+        if (plan.SampleQueries.Count == 0)
+        {
+            // Fall back to corpus overlap when no sample queries are available.
+            var corpus = plan.Understanding?.ToLowerInvariant() ?? "";
+            if (string.IsNullOrWhiteSpace(corpus)) return 0.5f;
+            var queryTokens = intent.NormalizedQuery
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Where(t => t.Length > 3)
+                .ToList();
+            if (queryTokens.Count == 0) return 0.5f;
+            var matchCount = queryTokens.Count(t => corpus.Contains(t));
+            return (float)matchCount / queryTokens.Count;
+        }
 
-        if (string.IsNullOrWhiteSpace(corpus)) return 0.5f;
+        // Best sample-query similarity (normalized edit distance).
+        var normalized = intent.NormalizedQuery;
+        return plan.SampleQueries
+            .Max(sq => NormalizedEditSimilarity(normalized, sq.Trim().ToLowerInvariant()));
+    }
 
-        var queryTokens = intent.NormalizedQuery
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Where(t => t.Length > 3)
-            .ToList();
+    /// <summary>
+    /// Normalized edit similarity: 1 - (Levenshtein / max(|a|, |b|)).
+    /// Returns 1.0 for identical strings, 0.0 for completely different.
+    /// </summary>
+    private static float NormalizedEditSimilarity(string a, string b)
+    {
+        if (string.IsNullOrEmpty(a) && string.IsNullOrEmpty(b)) return 1f;
+        if (string.IsNullOrEmpty(a) || string.IsNullOrEmpty(b)) return 0f;
+        int maxLen = Math.Max(a.Length, b.Length);
+        int dist   = LevenshteinDistance(a, b);
+        return 1f - ((float)dist / maxLen);
+    }
 
-        if (queryTokens.Count == 0) return 0.5f;
+    private static int LevenshteinDistance(string a, string b)
+    {
+        int m = a.Length;
+        int n = b.Length;
 
-        var matchCount = queryTokens.Count(t => corpus.Contains(t));
-        return (float)matchCount / queryTokens.Count;
+        // Use two-row rolling array to keep memory O(n).
+        var prev = new int[n + 1];
+        var curr = new int[n + 1];
+
+        for (int j = 0; j <= n; j++) prev[j] = j;
+
+        for (int i = 1; i <= m; i++)
+        {
+            curr[0] = i;
+            for (int j = 1; j <= n; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                curr[j] = Math.Min(
+                    Math.Min(curr[j - 1] + 1, prev[j] + 1),
+                    prev[j - 1] + cost);
+            }
+            (prev, curr) = (curr, prev);
+        }
+
+        return prev[n];
     }
 
     private static string BuildExplanation(CandidateResult c)

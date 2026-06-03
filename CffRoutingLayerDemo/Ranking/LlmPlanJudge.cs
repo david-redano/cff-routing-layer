@@ -1,16 +1,11 @@
-// Ranking/LlmPlanJudge.cs
-namespace CffRoutingLayerDemo.Ranking;
-
 using System.Text;
 using System.Text.Json;
 using CffRoutingLayerDemo.Bedrock;
 using CffRoutingLayerDemo.Matching;
 using CffRoutingLayerDemo.Queries;
 
-/// <summary>
-/// Uses Claude to select the best plan when deterministic ranking is ambiguous.
-/// Only invoked when FeatureAlignmentRanker reports IsAmbiguous=true.
-/// </summary>
+namespace CffRoutingLayerDemo.Ranking;
+
 public sealed class LlmPlanJudge : IPlanRanker
 {
     private readonly BedrockLlmHelper _bedrock;

@@ -10,6 +10,7 @@ using CffRoutingLayerDemo.Index;
 using CffRoutingLayerDemo.Matching;
 using CffRoutingLayerDemo.Plans;
 using CffRoutingLayerDemo.Ranking;
+using CffRoutingLayerDemo.Retrieval;
 using CffRoutingLayerDemo.Understanding;
 using CffRoutingLayerDemo.Validation;
 
@@ -29,7 +30,6 @@ var plans = Directory.Exists(plansDir)
     : Array.Empty<PlanDefinition>();
 
 var clusters  = new ClusterBuilder().Build(plans);
-var planIndex = new PlanIndex(plans, clusters);
 
 // Load demo scenarios from benchmark YAMLs
 DemoScenarios.LoadFromBenchmarks(benchmarkFile);
@@ -37,7 +37,8 @@ DemoScenarios.LoadFromBenchmarks(rewriterBenchmarkFile);
 
 // ── Build infrastructure ──────────────────────────────────────────────────────
 
-BedrockLlmHelper? bedrockHelper = config.UseLlmQueryParser || config.UseLlmRanker || config.UseBedrockRag
+BedrockLlmHelper? bedrockHelper = config.UseLlmQueryParser || config.UseLlmRanker
+                                   || config.UseBedrockRag || config.UseHybridRetrieval
     ? new BedrockLlmHelper(config)
     : null;
 
@@ -48,6 +49,26 @@ IQueryParser queryParser = (config.UseLlmQueryParser && bedrockHelper is not nul
 IPlanRanker ranker = (config.UseLlmRanker && bedrockHelper is not null)
     ? new LlmPlanJudge(bedrockHelper)
     : new FeatureAlignmentRanker();
+
+// Phase 1 retrieval: hybrid (embedding + metadata) or structural filter-based.
+IPlanIndex planIndex;
+if (config.UseHybridRetrieval && bedrockHelper is not null)
+{
+    var embeddingService = new BedrockEmbeddingService(config);
+    var embeddingIndex   = new PlanEmbeddingIndex();
+
+    Console.ForegroundColor = ConsoleColor.DarkCyan;
+    Console.Write("  Building plan embedding index");
+    await embeddingIndex.BuildAsync(plans, embeddingService);
+    Console.WriteLine($" ✓ ({plans.Count} plans indexed)");
+    Console.ResetColor();
+
+    planIndex = new HybridPlanRetriever(plans, embeddingService, embeddingIndex);
+}
+else
+{
+    planIndex = new PlanIndex(plans, clusters);
+}
 
 IPlanValidator validator = new CompositeValidator();
 
@@ -201,6 +222,47 @@ while (!cts.IsCancellationRequested)
                 AgentId:           "",
                 AssistantResponse: NoMatchMsg,
                 WasStreamed:       false));
+        }
+        else if (decision.Status == RoutingStatus.Clarify)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"  ⚠ {decision.Message}");
+            Console.ResetColor();
+        }
+        else if (decision.Status == RoutingStatus.Ambiguous)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"  ⚠ {decision.Message}");
+            Console.ResetColor();
+        }
+        else if (decision.Status == RoutingStatus.ConfirmAndExecute && decision.SelectedPlan is not null)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"  ⚠ {decision.Message}");
+            Console.Write("  Type 'yes' to confirm or anything else to cancel: ");
+            Console.ResetColor();
+            var confirm = Console.ReadLine()?.Trim().ToLowerInvariant();
+            if (confirm is "yes" or "y")
+            {
+                var result = await ExecuteSelectedPlanAsync(decision.SelectedPlan, trimmed, executor, cts.Token);
+                ConsoleRenderer.PrintResult(result, fromCache: false);
+                history.AddTurn(new ConversationTurn(
+                    Timestamp:         DateTime.UtcNow,
+                    UserMessage:       trimmed,
+                    NormalizedMessage: trimmed,
+                    ExtractedEntities: decision.SelectedPlan.SlotBindings
+                        .ToDictionary(b => b.SlotName, b => b.Value),
+                    Intent:            intent,
+                    AgentId:           agentId,
+                    AssistantResponse: result,
+                    WasStreamed:       false));
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.WriteLine("  Cancelled. Please rephrase your request.");
+                Console.ResetColor();
+            }
         }
         else if (decision.Status == RoutingStatus.Success && decision.SelectedPlan is not null)
         {

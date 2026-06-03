@@ -16,7 +16,8 @@ public sealed class ActionClassifier
     private static readonly Dictionary<DomainAction, string[]> ActionVerbs = new()
     {
         [DomainAction.List]       = ["show", "list", "display", "get", "fetch", "find", "retrieve", "what are", "which"],
-        [DomainAction.Create]     = ["create", "make", "send", "issue", "build"],
+        [DomainAction.Create]     = ["create", "make", "send", "issue", "build",
+                                      "invoice that", "invoice this", "invoice them", "invoice the customer"],
         [DomainAction.Compute]    = ["calculate", "compute", "estimate", "determine", "generate", "produce", "run", "execute",
                                       "percentage", "percent", "ratio", "rate of", "average", "how much", "what is the total", "sum"],
         [DomainAction.Compare]    = ["compare", "reconcile", "match", "cross-reference", "versus", "vs", "difference between"],

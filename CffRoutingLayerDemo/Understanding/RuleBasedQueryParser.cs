@@ -73,6 +73,7 @@ public sealed class RuleBasedQueryParser : IQueryParser
             SubIntents        = [],
             OverallConfidence = confidence,
             ActionConfidence  = action.Confidence,
+            Reasoning         = "",
             ParsingNotes      = []
         };
 

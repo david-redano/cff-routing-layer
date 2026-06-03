@@ -21,6 +21,8 @@ sampleQueries:
   - "What deductions can we take for this year?"
   - "Find write-offs for the business in 2024"
   - "How can we reduce our tax bill this year?"
+  - "Show me tax saving opportunities for this year"
+  - "What tax deductions are available for us?"
 steps:
   - id: 1
     action: fetch-expenses

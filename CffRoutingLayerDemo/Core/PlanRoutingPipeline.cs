@@ -11,32 +11,35 @@ using CffRoutingLayerDemo.Understanding;
 using CffRoutingLayerDemo.Validation;
 
 /// <summary>
-/// Orchestrates the four-layer routing pipeline:
-///   Layer 1 — Query Understanding   (free text → structured QueryIntent)
-///   Layer 2 — Plan Retrieval        (QueryIntent → 1-5 candidate plans via structural index)
-///   Layer 3 — Plan Ranking          (candidates → ranked shortlist, LLM only if ambiguous)
-///   Layer 4 — Plan Validation       (verify selected plan can execute with available slots)
+/// Orchestrates the four-phase routing pipeline (redesigned):
+///   Phase 0 — Intent Extraction    (free text → structured QueryIntent, LLM-first with fallback)
+///   Phase 1 — Coarse Retrieval     (QueryIntent → top-10 candidates, hybrid embedding + metadata)
+///   Phase 2 — Fine Ranking         (candidates → re-ranked shortlist, LLM batch scoring)
+///   Phase 3 — Validation &amp; Decision (slot filling + calibrated confidence gating)
 ///
 /// Produces a RoutingDecision with a full diagnostic trace for every query.
 /// Execution of the selected plan is the caller's responsibility.
 /// </summary>
 public sealed class PlanRoutingPipeline
 {
-    private readonly IQueryParser   _queryParser;
-    private readonly IPlanIndex     _planIndex;
-    private readonly IPlanRanker    _ranker;
-    private readonly IPlanValidator _validator;
+    private readonly IQueryParser        _queryParser;
+    private readonly IPlanIndex          _planIndex;
+    private readonly IPlanRanker         _ranker;
+    private readonly IPlanValidator      _validator;
+    private readonly CalibratedThresholds _thresholds;
 
     public PlanRoutingPipeline(
         IQueryParser   queryParser,
         IPlanIndex     planIndex,
         IPlanRanker    ranker,
-        IPlanValidator validator)
+        IPlanValidator validator,
+        CalibratedThresholds? thresholds = null)
     {
         _queryParser = queryParser;
         _planIndex   = planIndex;
         _ranker      = ranker;
         _validator   = validator;
+        _thresholds  = thresholds ?? CalibratedThresholds.Default;
     }
 
     /// <summary>
@@ -66,7 +69,7 @@ public sealed class PlanRoutingPipeline
         };
 
         // ═════════════════════════════════════════════════
-        // Layer 1 — Query Understanding
+        // Phase 0 — Intent Extraction
         // ═════════════════════════════════════════════════
         var l1Sw   = Stopwatch.StartNew();
         var intent = await _queryParser.ParseAsync(rawQuery, context);
@@ -80,24 +83,31 @@ public sealed class PlanRoutingPipeline
             intent.DomainConfidence,
             Slots            = intent.ExtractedSlots.Select(s => $"{s.Name}={s.Value}"),
             TemporalType     = intent.TemporalScope?.Type.ToString(),
-            intent.OverallConfidence
+            intent.OverallConfidence,
+            intent.Reasoning
         }));
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"  ► Layer 1  Query understanding...          ✓ {intent.PrimaryAction}/{intent.Domain} ({intent.OverallConfidence:P0})");
+        Console.WriteLine($"  ► Phase 0  Intent extraction...            ✓ {intent.PrimaryAction}/{intent.Domain} ({intent.OverallConfidence:P0})");
+        if (!string.IsNullOrEmpty(intent.Reasoning))
+            Console.WriteLine($"             reasoning: {intent.Reasoning}");
+        if (intent.TemporalScope is { Type: not TemporalScopeType.None } ts)
+        {
+            var tsLabel = ts.RelativeExpression
+                ?? (ts.Start.HasValue && ts.End.HasValue
+                    ? $"{ts.Start:yyyy-MM-dd} → {ts.End:yyyy-MM-dd}"
+                    : ts.Type.ToString());
+            Console.WriteLine($"             temporal: {tsLabel}");
+        }
+        foreach (var slot in intent.ExtractedSlots)
+            Console.WriteLine($"             slot: {slot.Name} = \"{slot.Value}\" ({slot.Confidence:P0})");
         Console.ResetColor();
 
-        if (intent.OverallConfidence < 0.25f)
-        {
-            notes.Add($"Rejected: confidence {intent.OverallConfidence:P0} below threshold");
-            return RoutingDecision.Rejected("Confidence below threshold", BuildTrace());
-        }
-
         // ═════════════════════════════════════════════════
-        // Layer 2 — Plan Retrieval
+        // Phase 1 — Hybrid Retrieval
         // ═════════════════════════════════════════════════
         var l2Sw       = Stopwatch.StartNew();
-        var candidates = _planIndex.Retrieve(intent, maxCandidates: 5);
+        var candidates = await _planIndex.RetrieveAsync(intent, maxCandidates: 10, ct);
         l2Sw.Stop();
 
         layers.Add(new LayerTrace("Retrieval", l2Sw.Elapsed.TotalMilliseconds, new
@@ -109,7 +119,7 @@ public sealed class PlanRoutingPipeline
         }));
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"  ► Layer 2  Plan retrieval...               ✓ {candidates.Count} candidates");
+        Console.WriteLine($"  ► Phase 1  Hybrid retrieval...             ✓ {candidates.Count} candidates");
         foreach (var c in candidates)
             Console.WriteLine($"             • {c.Plan.PlanId} ({c.AlignmentScore:P0})");
         Console.ResetColor();
@@ -121,7 +131,7 @@ public sealed class PlanRoutingPipeline
         }
 
         // ═════════════════════════════════════════════════
-        // Layer 3 — Plan Ranking
+        // Phase 2 — Fine Ranking
         // ═════════════════════════════════════════════════
         var l3Sw    = Stopwatch.StartNew();
         var ranking = await _ranker.RankAsync(intent, candidates);
@@ -136,32 +146,55 @@ public sealed class PlanRoutingPipeline
         }));
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"  ► Layer 3  Plan ranking...                 ✓ {ranking.Candidates.Count} candidates" +
+        Console.WriteLine($"  ► Phase 2  Fine ranking...                 ✓ {ranking.Candidates.Count} candidates" +
                           (ranking.IsAmbiguous ? " [AMBIGUOUS]" : ""));
         foreach (var c in ranking.Candidates)
             Console.WriteLine($"             • {c.Plan.PlanId} ({c.Score:P0})");
         Console.ResetColor();
 
-        if (ranking.TopConfidence < 0.35f)
-        {
-            notes.Add($"Low confidence: top score {ranking.TopConfidence:P0}");
-            return RoutingDecision.NoPlanFound(
-                $"Best candidate scored {ranking.TopConfidence:P0} \u2014 no confident match found",
-                BuildTrace());
-        }
-
-        // Reject when all top candidates are statistically tied and none scores high enough
-        // to be trusted as the correct plan for this query.
-        if (ranking.IsAmbiguous && ranking.TopConfidence < 0.65f)
-        {
-            notes.Add($"Ambiguous: top score {ranking.TopConfidence:P0}, candidates tied within 0.10");
-            return RoutingDecision.NoPlanFound(
-                $"No confident match found \u2014 top {ranking.Candidates.Count} candidates all score around {ranking.TopConfidence:P0}",
-                BuildTrace());
-        }
-
         // ═════════════════════════════════════════════════
-        // Layer 4 — Plan Validation
+        // Phase 3 — Validation & Calibrated Decision
+        // ═════════════════════════════════════════════════
+        var topScore    = ranking.TopConfidence;
+        var secondScore = ranking.Candidates.Count > 1 ? ranking.Candidates[1].Score : 0f;
+        var decision    = _thresholds.Decide(topScore, secondScore);
+
+        // Hard reject and clarify paths — no validation needed.
+        if (decision == RoutingStatus.Rejected)
+        {
+            notes.Add($"Rejected: top score {topScore:P0} below reject threshold ({_thresholds.RejectThreshold:P0})");
+            return RoutingDecision.Rejected(
+                $"No plan found — best match scored {topScore:P0} which is too low to be confident",
+                BuildTrace());
+        }
+
+        if (decision == RoutingStatus.Clarify)
+        {
+            notes.Add($"Clarify: top score {topScore:P0} in clarification band");
+            return RoutingDecision.Clarify(
+                $"I found a possible match ({ranking.Candidates[0].Plan.DisplayName}, {topScore:P0} confidence) but I'm not sure. Could you rephrase your request?",
+                BuildTrace());
+        }
+
+        if (decision == RoutingStatus.Ambiguous)
+        {
+            notes.Add($"Ambiguous: scores {topScore:P0} vs {secondScore:P0} (gap {topScore - secondScore:P0} below {_thresholds.AmbiguityGap:P0})");
+            var topTwo = ranking.Candidates.Take(2).Select(c =>
+            {
+                var b = BuildSlotBindings(intent, c.Plan);
+                return new SelectedPlan
+                {
+                    Plan             = c.Plan,
+                    Confidence       = c.Score,
+                    SlotBindings     = b,
+                    ValidationResult = _validator.Validate(c.Plan, intent, b),
+                    Explanation      = c.Explanation
+                };
+            }).ToList();
+            return RoutingDecision.Ambiguous(topTwo, BuildTrace());
+        }
+
+        // Validate the top candidates. Try fallbacks on validation failure.
         // ═════════════════════════════════════════════════
         for (int attempt = 0; attempt < ranking.Candidates.Count; attempt++)
         {
@@ -182,7 +215,7 @@ public sealed class PlanRoutingPipeline
             }));
 
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"  ► Layer 4  Validation ({candidate.Plan.PlanId})...         {(validation.Status == ValidationStatus.Fail ? "✗" : "✓")} {validation.Status}");
+            Console.WriteLine($"  ► Phase 3  Validation ({candidate.Plan.PlanId})...         {(validation.Status == ValidationStatus.Fail ? "✗" : "✓")} {validation.Status}");
             Console.ResetColor();
 
             if (validation.Status == ValidationStatus.Fail)
@@ -199,6 +232,10 @@ public sealed class PlanRoutingPipeline
                 ValidationResult = validation,
                 Explanation      = attempt == 0 ? candidate.Explanation : $"Fallback #{attempt + 1}: {candidate.Explanation}"
             };
+
+            // Return ConfirmAndExecute for plans in the confirmation band.
+            if (decision == RoutingStatus.ConfirmAndExecute && attempt == 0)
+                return RoutingDecision.ConfirmAndExecute(selected, BuildTrace());
 
             return RoutingDecision.Success(selected, BuildTrace());
         }
