@@ -5,6 +5,7 @@ using CffRoutingLayerDemo.Index;
 using CffRoutingLayerDemo.Matching;
 using CffRoutingLayerDemo.Plans;
 using CffRoutingLayerDemo.Queries;
+using CffRoutingLayerDemo.Understanding;
 
 /// <summary>
 /// Phase 1 — Hybrid retrieval combining:
@@ -42,7 +43,8 @@ public sealed class HybridPlanRetriever : IPlanIndex
         CancellationToken ct = default)
     {
         // ── Signal A: semantic embedding similarity ──────────────────────────
-        var queryEmbedding = await _embedder.EmbedAsync(intent.RawQuery, ct);
+        var normalizedQuery = QueryNormalizer.NormalizeWithSlots(intent.RawQuery, intent.ExtractedSlots);
+        var queryEmbedding = await _embedder.EmbedAsync(normalizedQuery, ct);
         var embeddingScores = _embeddingIndex.Search(queryEmbedding, _allPlans.Count)
             .ToDictionary(x => x.PlanId, x => x.Score);
 

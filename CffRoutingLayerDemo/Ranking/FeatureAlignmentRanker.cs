@@ -73,16 +73,15 @@ public sealed class FeatureAlignmentRanker : IPlanRanker
         var unmetCount = candidate.MismatchedFeatures.Count(f => f.StartsWith("entities:"));
         baseScore -= unmetCount * 0.15f;
 
-        // Bonus for output field relevance (10 %)
+        // Bonus for output field relevance (up to +0.08)
         var outputOverlap = ComputeOutputRelevance(candidate, intent);
 
-        // Bonus for description / sample-query text overlap (15 %)
-        // This is the primary tiebreaker: when two plans share the same feature vector
-        // (domain, action, entities, etc.) the one whose human-readable text better
-        // matches the user's wording wins.
+        // Bonus for description / sample-query text overlap (up to +0.20)
+        // High description relevance signals the plan was written for this exact query pattern;
+        // reward it enough to push clear matches above ExecuteThreshold without deflating the base.
         var descOverlap = ComputeDescriptionRelevance(candidate, intent);
 
-        baseScore = baseScore * 0.75f + outputOverlap * 0.10f + descOverlap * 0.15f;
+        baseScore = baseScore + outputOverlap * 0.08f + descOverlap * 0.20f;
 
         return Math.Clamp(baseScore, 0f, 1f);
     }

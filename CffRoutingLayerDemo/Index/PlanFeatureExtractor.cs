@@ -120,7 +120,30 @@ public sealed class PlanFeatureExtractor
 
     private static DomainAction InferPrimaryAction(PlanDefinition plan)
     {
-        // Last step's action usually defines the plan's purpose
+        // 1. Intent name is the most authoritative signal — it's the plan author's explicit
+        //    declaration of purpose. Check the START of the intent name (prefix-based).
+        //    This avoids the common mistake of inferring Compute from a compute-* step name
+        //    when the plan's intent is clearly List/Identify/Retrieve/Show.
+        var intentLower = plan.Intent.ToLowerInvariant();
+        if (intentLower.StartsWith("list") || intentLower.StartsWith("show") ||
+            intentLower.StartsWith("get") || intentLower.StartsWith("retrieve") ||
+            intentLower.StartsWith("identify") || intentLower.StartsWith("find"))
+            return DomainAction.List;
+        if (intentLower.StartsWith("generate") || intentLower.StartsWith("calculate") ||
+            intentLower.StartsWith("compute") || intentLower.StartsWith("count"))
+            return DomainAction.Compute;
+        if (intentLower.StartsWith("compare") || intentLower.StartsWith("reconcile"))
+            return DomainAction.Compare;
+        if (intentLower.StartsWith("forecast") || intentLower.StartsWith("predict"))
+            return DomainAction.Forecast;
+        if (intentLower.StartsWith("audit") || intentLower.StartsWith("analyze") ||
+            intentLower.StartsWith("analyse"))
+            return DomainAction.Audit;
+        if (intentLower.StartsWith("create") || intentLower.StartsWith("send") ||
+            intentLower.StartsWith("issue"))
+            return DomainAction.Create;
+
+        // 2. Fall back to last step's action name.
         var lastAction = plan.Steps
             .OrderByDescending(s => s.Id)
             .Select(s => (string.IsNullOrEmpty(s.ToolName) ? s.Action : s.ToolName).ToLowerInvariant())
@@ -136,15 +159,6 @@ public sealed class PlanFeatureExtractor
             return DomainAction.Forecast;
         if (lastAction.Contains("audit") || lastAction.Contains("flag") || lastAction.Contains("detect"))
             return DomainAction.Audit;
-
-        // Fall back to intent name
-        var intent = plan.Intent.ToLowerInvariant();
-        if (intent.Contains("generate") || intent.Contains("compute") || intent.Contains("calculate"))
-            return DomainAction.Compute;
-        if (intent.Contains("create") || intent.Contains("send") || intent.Contains("issue") || intent.Contains("build"))
-            return DomainAction.Create;
-        if (intent.Contains("list") || intent.Contains("get") || intent.Contains("show"))
-            return DomainAction.List;
 
         return DomainAction.Compute;
     }

@@ -1,0 +1,46 @@
+planId: invoice-paid-total-001
+intent: CalculateTotalAmountPaidInvoices
+agentId: InvoiceAgent
+domain: finance
+displayName: Invoice Agent
+capabilities:
+  - invoicing
+  - billing
+understanding: "Calculate the total monetary amount of invoices that have already been paid, optionally filtered by a date period such as this quarter, this month, or a specific date range"
+expectedData:
+  summary:
+    - TotalPaidAmount
+    - PaidInvoiceCount
+    - Currency
+    - PeriodStart
+    - PeriodEnd
+defaultEntities:
+  companyId: DEMO-001
+sampleQueries:
+  - "total amount of invoices issued this quarter already paid"
+  - "what is the total amount of paid invoices this quarter?"
+  - "sum of all invoices already paid this quarter"
+  - "total paid invoice amount for this month"
+  - "how much in invoices have been paid so far this quarter?"
+  - "total value of paid invoices this period"
+  - "sum of invoices paid this month"
+  - "what is the total of all invoices already paid?"
+steps:
+  - id: 1
+    action: fetch-invoices
+    stepType: Tool
+    toolName: invoicing_list_invoices
+    stepReason: "Fetch invoices filtered by paid status and date period"
+    dependsOn: []
+    outputFields: [invoices, invoiceCount]
+    input:
+      - key: status
+        value: "paid"
+    nextStep: 2
+  - id: 2
+    action: get-total-paid-invoice-amount
+    stepType: Code
+    functionName: buildOutput
+    stepReason: "Sum the total amount across all paid invoices in the period"
+    dependsOn: [1]
+    outputFields: [totalPaidAmount, paidInvoiceCount, currency, periodStart, periodEnd]

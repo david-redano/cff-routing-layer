@@ -113,11 +113,20 @@ public static class ConsoleRenderer
             .AddRow("Avg latency (miss/fresh)", $"{s.AvgCacheMissMs:F0} ms")
             .AddRow("Total executor time",     $"{s.TotalExecutorMs} ms")
             .AddRow("", "")
-            .AddRow("LLM calls (total)",       $"[yellow]{s.TotalLlmCalls}[/]")
-            .AddRow("  Rewriter calls",        $"{s.LlmRewriterCalls}  ({(s.TotalRewriterMs > 0 ? s.TotalRewriterMs / s.LlmRewriterCalls : 0)} ms avg)")
-            .AddRow("  Classifier calls",      $"{s.LlmClassifierCalls}  ({(s.LlmClassifierCalls > 0 && s.TotalClassifierMs > 0 ? s.TotalClassifierMs / s.LlmClassifierCalls : 0)} ms avg)")
-            .AddRow("  RAG calls",             $"{s.LlmRagCalls}")
-            .AddRow("  Streaming calls",       $"{s.LlmStreamingCalls}");
+            .AddRow("LLM calls (total)",            $"[yellow]{s.TotalLlmCalls}[/]")
+            .AddRow("  Phase 0 (intent)",            $"{s.LlmPhase0Calls}  ({(s.LlmPhase0Calls > 0 ? s.TotalPhase0Ms / s.LlmPhase0Calls : 0)} ms avg)")
+            .AddRow("  Phase 2 (ranking)",           $"{s.LlmPhase2Calls}  ({(s.LlmPhase2Calls > 0 ? s.TotalPhase2Ms / s.LlmPhase2Calls : 0)} ms avg)")
+            .AddRow("  RAG calls",                   $"{s.LlmRagCalls}")
+            .AddRow("  Streaming calls",             $"{s.LlmStreamingCalls}")
+            .AddRow("", "")
+            .AddRow("Tokens — input",               $"{s.TotalInputTokens:N0}")
+            .AddRow("Tokens — output",              $"{s.TotalOutputTokens:N0}")
+            .AddRow("Tokens — total",               $"[bold]{s.TotalInputTokens + s.TotalOutputTokens:N0}[/]")
+            .AddRow("", "")
+            .AddRow("Est. cost (input)",            $"[grey]${s.EstimatedInputCostUsd:F5}[/]")
+            .AddRow("Est. cost (output)",           $"[grey]${s.EstimatedOutputCostUsd:F5}[/]")
+            .AddRow("Est. cost (total)",            $"[bold yellow]${s.EstimatedTotalCostUsd:F5}[/]")
+            .AddRow("[grey]  model: Claude Haiku[/]",  "[grey]$0.25/1M in · $1.25/1M out[/]");
 
         AnsiConsole.Write(summary);
 

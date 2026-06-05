@@ -4,24 +4,35 @@ intent: ListInvoices
 agentId: InvoiceAgent
 domain: finance
 displayName: Invoice Agent
-description: "List all invoices for the user or a specified customer, period, or status"
+description: "List all invoices for the user or a specified customer, period, or status, optionally grouped by customer"
 capabilities:
   - invoicing
   - billing
-understanding: "List all outstanding or historical invoices optionally filtered by customer, date period, or payment status"
+understanding: "List, show, or get invoices filtered by customer, date period, or payment status; supports grouping by customer and temporal filters such as this month, last month, or a specific date range"
 expectedData:
   summary:
     - InvoiceCount
     - TotalAmount
     - Currency
+    - CustomerName
+    - CustomerTotal
+    - PeriodStart
+    - PeriodEnd
 defaultEntities:
   companyId: DEMO-001
 sampleQueries:
   - "list my invoices"
+  - "list my invoices this month per customer"
+  - "list my invoices this month by customer"
   - "show all invoices for last month"
+  - "show invoices this month grouped by customer"
   - "get invoice history"
+  - "get all invoices for this month"
   - "display invoices for Acme Corp"
   - "what invoices are outstanding?"
+  - "show me invoices by customer for this period"
+  - "list invoices grouped by customer"
+  - "list invoices for current month"
 steps:
   - id: 1
     action: fetch-invoices

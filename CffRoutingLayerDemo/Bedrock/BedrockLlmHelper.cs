@@ -20,6 +20,13 @@ public sealed class BedrockLlmHelper : IDisposable
     private readonly AmazonBedrockRuntimeClient _client;
     private readonly string _modelId;
 
+    // Cumulative token counters — updated atomically after every Converse call.
+    private long _totalInputTokens;
+    private long _totalOutputTokens;
+
+    public long TotalInputTokens  => Interlocked.Read(ref _totalInputTokens);
+    public long TotalOutputTokens => Interlocked.Read(ref _totalOutputTokens);
+
     public BedrockLlmHelper(AppConfig config)
     {
         _modelId = config.BedrockLlmModelId;
@@ -82,6 +89,13 @@ public sealed class BedrockLlmHelper : IDisposable
         };
 
         var response = await _client.ConverseAsync(request, ct);
+
+        if (response.Usage is { } usage)
+        {
+            Interlocked.Add(ref _totalInputTokens,  (long)(usage.InputTokens  ?? 0));
+            Interlocked.Add(ref _totalOutputTokens, (long)(usage.OutputTokens ?? 0));
+        }
+
         return response.Output?.Message?.Content?.FirstOrDefault()?.Text?.Trim() ?? "";
     }
 

@@ -33,7 +33,7 @@ steps:
         value: "2026-06-01"
     nextStep: 2
   - id: 2
-    action: compute-identify-account-with-largest-movement
+    action: get-account-with-largest-movement
     stepType: Code
     functionName: buildOutput
     stepReason: "Identify account with largest movement"

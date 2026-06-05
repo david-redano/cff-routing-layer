@@ -15,20 +15,24 @@ public sealed class SessionStats
     public int StreamingFallbacks { get; private set; }
     public int GuardrailRejections { get; private set; }
 
-    // LLM call counters (incremented from RoutingEngine via the record methods)
-    public int LlmRewriterCalls    { get; private set; }
-    public int LlmClassifierCalls  { get; private set; }
+    // LLM call counters — aligned to the pipeline phases that call Bedrock
+    public int LlmPhase0Calls      { get; private set; }  // Phase 0: intent extraction (LlmQueryParser)
+    public int LlmPhase2Calls      { get; private set; }  // Phase 2: plan ranking (LlmPlanJudge)
     public int LlmRagCalls         { get; private set; }
     public int LlmStreamingCalls   { get; private set; }
 
+    // Token usage (accumulated from BedrockLlmHelper cumulative counters)
+    public long TotalInputTokens   { get; private set; }
+    public long TotalOutputTokens  { get; private set; }
+
     // ── Timing accumulators (ms) ──────────────────────────────────────────────
 
-    public long TotalElapsedMs         { get; private set; }
-    public long TotalCacheHitElapsedMs { get; private set; }
+    public long TotalElapsedMs          { get; private set; }
+    public long TotalCacheHitElapsedMs  { get; private set; }
     public long TotalCacheMissElapsedMs { get; private set; }
-    public long TotalRewriterMs        { get; private set; }
-    public long TotalClassifierMs      { get; private set; }
-    public long TotalExecutorMs        { get; private set; }
+    public long TotalPhase0Ms           { get; private set; }
+    public long TotalPhase2Ms           { get; private set; }
+    public long TotalExecutorMs         { get; private set; }
 
     // intent distribution
     private readonly Dictionary<string, int> _intentCounts = new(StringComparer.Ordinal);
@@ -55,13 +59,18 @@ public sealed class SessionStats
             _intentCounts[intent] = _intentCounts.GetValueOrDefault(intent) + 1;
     }
 
-    public void RecordGuardrailRejection()    => GuardrailRejections++;
-    public void RecordStreamingFallback()     => StreamingFallbacks++;
-    public void RecordLlmRewriterCall(long ms)   { LlmRewriterCalls++;   TotalRewriterMs   += ms; }
-    public void RecordLlmClassifierCall(long ms) { LlmClassifierCalls++; TotalClassifierMs += ms; }
+    public void RecordGuardrailRejection()       => GuardrailRejections++;
+    public void RecordStreamingFallback()        => StreamingFallbacks++;
+    public void RecordLlmPhase0Call(long ms)     { LlmPhase0Calls++;  TotalPhase0Ms  += ms; }
+    public void RecordLlmPhase2Call(long ms)     { LlmPhase2Calls++;  TotalPhase2Ms  += ms; }
     public void RecordLlmRagCall()               => LlmRagCalls++;
     public void RecordLlmStreamingCall()         => LlmStreamingCalls++;
     public void RecordExecutorMs(long ms)        => TotalExecutorMs += ms;
+    public void RecordLlmTokens(long input, long output)
+    {
+        TotalInputTokens  += input;
+        TotalOutputTokens += output;
+    }
 
     // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -69,7 +78,14 @@ public sealed class SessionStats
     public double AvgElapsedMs     => TotalQueries == 0 ? 0 : (double)TotalElapsedMs / TotalQueries;
     public double AvgCacheHitMs    => CacheHits    == 0 ? 0 : (double)TotalCacheHitElapsedMs  / CacheHits;
     public double AvgCacheMissMs   => CacheMisses  == 0 ? 0 : (double)TotalCacheMissElapsedMs / CacheMisses;
-    public int    TotalLlmCalls    => LlmRewriterCalls + LlmClassifierCalls + LlmRagCalls + LlmStreamingCalls;
+    public int    TotalLlmCalls    => LlmPhase0Calls + LlmPhase2Calls + LlmRagCalls + LlmStreamingCalls;
+
+    // Cost orientation — Claude Haiku on Bedrock: $0.25/1M input, $1.25/1M output
+    private const double InputCostPer1M  = 0.25;
+    private const double OutputCostPer1M = 1.25;
+    public double EstimatedInputCostUsd  => TotalInputTokens  / 1_000_000.0 * InputCostPer1M;
+    public double EstimatedOutputCostUsd => TotalOutputTokens / 1_000_000.0 * OutputCostPer1M;
+    public double EstimatedTotalCostUsd  => EstimatedInputCostUsd + EstimatedOutputCostUsd;
 
     public IReadOnlyDictionary<string, int> IntentCounts => _intentCounts;
 }

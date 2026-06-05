@@ -55,12 +55,12 @@ public sealed class PlanDefinition
     [YamlDotNet.Serialization.YamlIgnore]
     public PlanFeatureVector? Features { get; set; }
 
-    /// <summary>All required input slot names derived from step parameters and default entities.</summary>
+    /// <summary>All required input slot names — keys declared in defaultEntities.
+    /// Step-level parameters are considered implementation-internal (static config) and
+    /// are NOT treated as required dynamic inputs from the query.</summary>
     [YamlDotNet.Serialization.YamlIgnore]
     public IReadOnlyList<string> RequiredInputSlots =>
-        Steps
-            .SelectMany(s => s.Parameters.Keys)
-            .Concat(DefaultEntities.Keys)
+        DefaultEntities.Keys
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 

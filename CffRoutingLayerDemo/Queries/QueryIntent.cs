@@ -26,6 +26,12 @@ public sealed record QueryIntent
     // ─── What time frame? ───
     public required TemporalScope? TemporalScope { get; init; }
 
+    /// <summary>
+    /// Secondary temporal window for comparison queries ("this year vs last year").
+    /// Populated only when the query explicitly compares two periods.
+    /// </summary>
+    public TemporalScope? CompareTemporal { get; init; }
+
     // ─── What constraints/filters? ───
     public required IReadOnlyList<Constraint> Constraints { get; init; }
 

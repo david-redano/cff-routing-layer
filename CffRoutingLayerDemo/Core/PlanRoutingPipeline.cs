@@ -103,6 +103,67 @@ public sealed class PlanRoutingPipeline
             Console.WriteLine($"             slot: {slot.Name} = \"{slot.Value}\" ({slot.Confidence:P0})");
         Console.ResetColor();
 
+        // Phase 0 confidence gate — reject unrecognisable / noise queries before
+        // any retrieval or Bedrock ranking calls are made.
+        if (intent.OverallConfidence < _thresholds.MinPhase0Confidence)
+        {
+            notes.Add($"Phase 0 confidence {intent.OverallConfidence:P0} below minimum ({_thresholds.MinPhase0Confidence:P0}) — query too ambiguous");
+            return RoutingDecision.Rejected(
+                "I couldn't understand your request. Please try rephrasing it with more detail.",
+                BuildTrace());
+        }
+
+        // ═════════════════════════════════════════════════
+        // Multi-intent fork — route each sub-intent independently
+        // ═════════════════════════════════════════════════
+        if (intent.SubIntents.Count > 0)
+        {
+            // The root intent describes the FIRST task; subIntents are additional tasks.
+            // Route all of them: root first, then each sub-intent.
+            var allIntents = new[] { intent }.Concat(intent.SubIntents).ToList();
+
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"  ► Multi-intent: {allIntents.Count} tasks detected");
+            Console.ResetColor();
+
+            var plans  = new List<SelectedPlan>();
+            var failed = new List<string>();
+
+            foreach (var sub in allIntents)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine($"  ┌ Sub-intent: {sub.RawQuery}");
+                Console.ResetColor();
+
+                var subDecision = await RouteIntentAsync(sub, layers, notes, BuildTrace, ct);
+                if (subDecision.Status == RoutingStatus.Success && subDecision.SelectedPlan is not null)
+                    plans.Add(subDecision.SelectedPlan);
+                else
+                    failed.Add($"\"{sub.RawQuery}\" → {subDecision.Message}");
+            }
+
+            if (plans.Count == 0)
+                return RoutingDecision.NoPlanFound(
+                    $"None of the {allIntents.Count} tasks could be routed: {string.Join("; ", failed)}",
+                    BuildTrace());
+
+            if (failed.Count > 0)
+                notes.Add($"{failed.Count} task(s) failed routing: {string.Join("; ", failed)}");
+
+            return RoutingDecision.MultiSuccess(plans, BuildTrace());
+        }
+
+        return await RouteIntentAsync(intent, layers, notes, BuildTrace, ct);
+    }
+
+    /// <summary>Runs Phases 1–3 for a single already-parsed intent.</summary>
+    private async Task<RoutingDecision> RouteIntentAsync(
+        QueryIntent              intent,
+        List<LayerTrace>         layers,
+        List<string>             notes,
+        Func<RoutingTraceResult> buildTrace,
+        CancellationToken        ct)
+    {
         // ═════════════════════════════════════════════════
         // Phase 1 — Hybrid Retrieval
         // ═════════════════════════════════════════════════
@@ -127,7 +188,18 @@ public sealed class PlanRoutingPipeline
         if (candidates.Count == 0)
         {
             notes.Add("No plans survived structural filters");
-            return RoutingDecision.NoPlanFound($"No plans match domain={intent.Domain}, action={intent.PrimaryAction}", BuildTrace());
+            return RoutingDecision.NoPlanFound($"No plans match domain={intent.Domain}, action={intent.PrimaryAction}", buildTrace());
+        }
+
+        // Phase 1 minimum score gate — if even the best candidate is too weak,
+        // skip ranking and reject early (prevents Phase 2 from inflating low scores).
+        var topPhase1Score = candidates.Max(c => c.AlignmentScore);
+        if (topPhase1Score < _thresholds.MinPhase1Score)
+        {
+            notes.Add($"Phase 1 top score {topPhase1Score:P0} below minimum ({_thresholds.MinPhase1Score:P0}) — no confident candidate");
+            return RoutingDecision.NoPlanFound(
+                $"I couldn't find a matching plan (best match: {topPhase1Score:P0}). Please try rephrasing.",
+                buildTrace());
         }
 
         // ═════════════════════════════════════════════════
@@ -165,7 +237,7 @@ public sealed class PlanRoutingPipeline
             notes.Add($"Rejected: top score {topScore:P0} below reject threshold ({_thresholds.RejectThreshold:P0})");
             return RoutingDecision.Rejected(
                 $"No plan found — best match scored {topScore:P0} which is too low to be confident",
-                BuildTrace());
+                buildTrace());
         }
 
         if (decision == RoutingStatus.Clarify)
@@ -173,7 +245,7 @@ public sealed class PlanRoutingPipeline
             notes.Add($"Clarify: top score {topScore:P0} in clarification band");
             return RoutingDecision.Clarify(
                 $"I found a possible match ({ranking.Candidates[0].Plan.DisplayName}, {topScore:P0} confidence) but I'm not sure. Could you rephrase your request?",
-                BuildTrace());
+                buildTrace());
         }
 
         if (decision == RoutingStatus.Ambiguous)
@@ -191,7 +263,7 @@ public sealed class PlanRoutingPipeline
                     Explanation      = c.Explanation
                 };
             }).ToList();
-            return RoutingDecision.Ambiguous(topTwo, BuildTrace());
+            return RoutingDecision.Ambiguous(topTwo, buildTrace());
         }
 
         // Validate the top candidates. Try fallbacks on validation failure.
@@ -235,24 +307,32 @@ public sealed class PlanRoutingPipeline
 
             // Return ConfirmAndExecute for plans in the confirmation band.
             if (decision == RoutingStatus.ConfirmAndExecute && attempt == 0)
-                return RoutingDecision.ConfirmAndExecute(selected, BuildTrace());
+                return RoutingDecision.ConfirmAndExecute(selected, buildTrace());
 
-            return RoutingDecision.Success(selected, BuildTrace());
+            return RoutingDecision.Success(selected, buildTrace());
         }
 
         // All candidates failed validation
-        return RoutingDecision.ValidationFailed("All candidates failed slot coverage validation", BuildTrace());
+        return RoutingDecision.ValidationFailed("All candidates failed slot coverage validation", buildTrace());
     }
 
     private static IReadOnlyList<SlotBinding> BuildSlotBindings(QueryIntent intent, PlanDefinition plan)
     {
-        var bindings = new List<SlotBinding>();
+        var bindings  = new List<SlotBinding>();
+        var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var slot in intent.ExtractedSlots.Where(s => s.Confidence >= 0.5f))
         {
+            nameCount.TryGetValue(slot.Name, out var seen);
+            nameCount[slot.Name] = seen + 1;
+
+            // Rename duplicates: "period" → "period", "period2", "period3", …
+            // This preserves both periods in a comparison query without a key collision.
+            var slotName = seen == 0 ? slot.Name : $"{slot.Name}{seen + 1}";
+
             bindings.Add(new SlotBinding
             {
-                SlotName   = slot.Name,
+                SlotName   = slotName,
                 Value      = slot.Value,
                 Source     = BindingSource.QueryExtraction,
                 Confidence = slot.Confidence
@@ -286,6 +366,39 @@ public sealed class PlanRoutingPipeline
                 {
                     SlotName   = "period",
                     Value      = intent.TemporalScope.RelativeExpression,
+                    Source     = BindingSource.TemporalResolution,
+                    Confidence = 0.85f
+                });
+            }
+        }
+
+        if (intent.CompareTemporal is not null)
+        {
+            if (intent.CompareTemporal.Start.HasValue)
+                bindings.Add(new SlotBinding
+                {
+                    SlotName   = "compareStartDate",
+                    Value      = intent.CompareTemporal.Start.Value.ToString("yyyy-MM-dd"),
+                    Source     = BindingSource.TemporalResolution,
+                    Confidence = 0.9f
+                });
+
+            if (intent.CompareTemporal.End.HasValue)
+                bindings.Add(new SlotBinding
+                {
+                    SlotName   = "compareEndDate",
+                    Value      = intent.CompareTemporal.End.Value.ToString("yyyy-MM-dd"),
+                    Source     = BindingSource.TemporalResolution,
+                    Confidence = 0.9f
+                });
+
+            if (intent.CompareTemporal.RelativeExpression is not null &&
+                !bindings.Any(b => b.SlotName == "comparePeriod"))
+            {
+                bindings.Add(new SlotBinding
+                {
+                    SlotName   = "comparePeriod",
+                    Value      = intent.CompareTemporal.RelativeExpression,
                     Source     = BindingSource.TemporalResolution,
                     Confidence = 0.85f
                 });

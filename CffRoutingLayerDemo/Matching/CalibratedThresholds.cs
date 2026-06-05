@@ -16,7 +16,7 @@ namespace CffRoutingLayerDemo.Matching;
 public sealed class CalibratedThresholds
 {
     /// <summary>P(correct) > 95%: execute without confirmation.</summary>
-    public float ExecuteThreshold { get; set; } = 0.80f;
+    public float ExecuteThreshold { get; set; } = 0.75f;
 
     /// <summary>P(correct) > 75%: ask "Did you mean X?" before executing.</summary>
     public float ConfirmThreshold { get; set; } = 0.60f;
@@ -26,6 +26,19 @@ public sealed class CalibratedThresholds
 
     /// <summary>Minimum gap between top-1 and top-2 scores to avoid ambiguity prompt.</summary>
     public float AmbiguityGap { get; set; } = 0.08f;
+
+    /// <summary>
+    /// Minimum Phase 0 (intent extraction) confidence to proceed to retrieval.
+    /// Queries below this threshold are rejected immediately as unrecognisable noise
+    /// before any Bedrock embedding or ranking calls are made.
+    /// </summary>
+    public float MinPhase0Confidence { get; set; } = 0.28f;
+
+    /// <summary>
+    /// Minimum Phase 1 (hybrid retrieval) top candidate score to proceed to Phase 2.
+    /// When all candidates score below this, no plan is confident enough to rank.
+    /// </summary>
+    public float MinPhase1Score { get; set; } = 0.45f;
 
     public static CalibratedThresholds Default { get; } = new();
 

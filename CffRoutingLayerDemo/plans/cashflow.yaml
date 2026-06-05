@@ -7,7 +7,7 @@ description: "Generate a cash flow report for a given company and period"
 capabilities:
   - cash-flow
   - bookkeeping
-understanding: "Generate a cash flow report showing money received and spent for a given period"
+understanding: "Generate or calculate a cash flow report showing money received and spent for a company, optionally filtered by period; supports queries by company name with or without a date range"
 expectedData:
   summary:
     - TotalIncome
@@ -18,11 +18,22 @@ expectedData:
 defaultEntities:
   companyId: DEMO-001
   period: last month
+  ledgerType: operating
 sampleQueries:
   - "Generate a cash flow report for last month"
   - "Show me the cash flow for Acme Corp last month"
   - "What's the cash position for this quarter?"
   - "I need a cash flow summary for March"
+  - "calculate cashflow for company pepe"
+  - "calculate cashflow for company acme"
+  - "calculate cash flow for company X"
+  - "cashflow report for company"
+  - "what is the cashflow for this company?"
+  - "show cashflow for the company"
+  - "calculate the cash flow"
+  - "generate cashflow report"
+  - "cash flow for last quarter"
+  - "cashflow for company"
 steps:
   - id: 1
     action: fetch-transactions

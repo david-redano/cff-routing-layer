@@ -3,6 +3,7 @@ namespace CffRoutingLayerDemo.Retrieval;
 
 using System.Text;
 using CffRoutingLayerDemo.Plans;
+using CffRoutingLayerDemo.Understanding;
 
 /// <summary>
 /// Builds and stores pre-computed embedding vectors for every loaded plan.
@@ -51,9 +52,9 @@ public sealed class PlanEmbeddingIndex
     {
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(plan.Understanding))
-            sb.AppendLine(plan.Understanding);
+            sb.AppendLine(QueryNormalizer.NormalizeSampleQuery(plan.Understanding));
         foreach (var sq in plan.SampleQueries)
-            sb.AppendLine(sq);
+            sb.AppendLine(QueryNormalizer.NormalizeSampleQuery(sq));
         if (!string.IsNullOrWhiteSpace(plan.Domain))
             sb.AppendLine($"Domain: {plan.Domain}");
         if (!string.IsNullOrWhiteSpace(plan.Intent))

@@ -78,6 +78,7 @@ RagSummarizer? ragSummarizer = (config.UseBedrockRag && bedrockHelper is not nul
     : null;
 var executor      = new PlanExecutor(dataStore, ragSummarizer);
 var stats         = new SessionStats();
+long prevInputTokens = 0, prevOutputTokens = 0;
 
 var pipeline = new PlanRoutingPipeline(queryParser, planIndex, ranker, validator);
 
@@ -181,6 +182,26 @@ while (!cts.IsCancellationRequested)
         var intent  = decision.SelectedPlan?.Plan.Intent ?? decision.Status.ToString();
         var agentId = decision.SelectedPlan?.Plan.AgentId ?? "";
         stats.RecordQuery(fromCache: false, (long)elapsed.TotalMilliseconds, intent);
+
+        // Record per-phase LLM timing from the routing trace.
+        var understandingLayer = decision.Trace.Layers.FirstOrDefault(l => l.LayerName == "Understanding");
+        if (understandingLayer is not null)
+            stats.RecordLlmPhase0Call((long)understandingLayer.ElapsedMs);
+
+        var rankingLayer = decision.Trace.Layers.FirstOrDefault(l => l.LayerName == "Ranking");
+        if (rankingLayer is not null)
+            stats.RecordLlmPhase2Call((long)rankingLayer.ElapsedMs);
+
+        // Record token usage delta for this routing call.
+        if (bedrockHelper is not null)
+        {
+            var curIn  = bedrockHelper.TotalInputTokens;
+            var curOut = bedrockHelper.TotalOutputTokens;
+            stats.RecordLlmTokens(curIn - prevInputTokens, curOut - prevOutputTokens);
+            prevInputTokens  = curIn;
+            prevOutputTokens = curOut;
+        }
+
         ConsoleRenderer.PrintMetrics(elapsed, cached: false);
 
         if (decision.Status == RoutingStatus.Rejected)
@@ -251,7 +272,8 @@ while (!cts.IsCancellationRequested)
                     UserMessage:       trimmed,
                     NormalizedMessage: trimmed,
                     ExtractedEntities: decision.SelectedPlan.SlotBindings
-                        .ToDictionary(b => b.SlotName, b => b.Value),
+                        .GroupBy(b => b.SlotName, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(g => g.Key, g => g.First().Value, StringComparer.OrdinalIgnoreCase),
                     Intent:            intent,
                     AgentId:           agentId,
                     AssistantResponse: result,
@@ -264,6 +286,35 @@ while (!cts.IsCancellationRequested)
                 Console.ResetColor();
             }
         }
+        else if (decision.Status == RoutingStatus.Success && decision.MultiPlans is not null)
+        {
+            var multiResults = new List<string>();
+            for (int mi = 0; mi < decision.MultiPlans.Count; mi++)
+            {
+                var subPlan = decision.MultiPlans[mi];
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"\n  ══ Sub-task {mi + 1}/{decision.MultiPlans.Count}: {subPlan.Plan.DisplayName} ══");
+                Console.ResetColor();
+
+                var subResult = await ExecuteSelectedPlanAsync(subPlan, trimmed, executor, cts.Token);
+                ConsoleRenderer.PrintResult(subResult, fromCache: false);
+                multiResults.Add($"[{mi + 1}] {subPlan.Plan.DisplayName}: {subResult}");
+            }
+
+            var combinedResponse = string.Join("\n", multiResults);
+            history.AddTurn(new ConversationTurn(
+                Timestamp:         DateTime.UtcNow,
+                UserMessage:       trimmed,
+                NormalizedMessage: trimmed,
+                ExtractedEntities: decision.MultiPlans
+                    .SelectMany(p => p.SlotBindings)
+                    .GroupBy(b => b.SlotName, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().Value, StringComparer.OrdinalIgnoreCase),
+                Intent:            intent,
+                AgentId:           agentId,
+                AssistantResponse: combinedResponse,
+                WasStreamed:       false));
+        }
         else if (decision.Status == RoutingStatus.Success && decision.SelectedPlan is not null)
         {
             var result = await ExecuteSelectedPlanAsync(decision.SelectedPlan, trimmed, executor, cts.Token);
@@ -273,7 +324,8 @@ while (!cts.IsCancellationRequested)
                 UserMessage:       trimmed,
                 NormalizedMessage: trimmed,
                 ExtractedEntities: decision.SelectedPlan.SlotBindings
-                    .ToDictionary(b => b.SlotName, b => b.Value),
+                    .GroupBy(b => b.SlotName, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().Value, StringComparer.OrdinalIgnoreCase),
                 Intent:            intent,
                 AgentId:           agentId,
                 AssistantResponse: result,
@@ -348,8 +400,9 @@ static async Task<string> ExecuteSelectedPlanAsync(
     Console.WriteLine($"  ► Execute  Running plan {selected.Plan.PlanId}...");
     Console.ResetColor();
 
-    var entities = selected.SlotBindings.ToDictionary(
-        b => b.SlotName, b => b.Value, StringComparer.OrdinalIgnoreCase);
+    var entities = selected.SlotBindings
+        .GroupBy(b => b.SlotName, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.First().Value, StringComparer.OrdinalIgnoreCase);
 
     var routingCtx = new RoutingContext(
         RequestId:   Guid.NewGuid().ToString(),
@@ -442,6 +495,17 @@ static async Task RunDemoScenariosAsync(
                         AgentId:           "",
                         AssistantResponse: streamResult,
                         WasStreamed:       true));
+                }
+                else if (decision.Status == RoutingStatus.Success && decision.MultiPlans is not null)
+                {
+                    for (int mi = 0; mi < decision.MultiPlans.Count; mi++)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        Console.WriteLine($"\n  ══ Sub-task {mi + 1}/{decision.MultiPlans.Count}: {decision.MultiPlans[mi].Plan.DisplayName} ══");
+                        Console.ResetColor();
+                        var subResult = await ExecuteSelectedPlanAsync(decision.MultiPlans[mi], turn.UserMessage, executor, ct);
+                        ConsoleRenderer.PrintResult(subResult, fromCache: false);
+                    }
                 }
                 else if (decision.Status == RoutingStatus.Success && decision.SelectedPlan is not null)
                 {

@@ -1,6 +1,6 @@
 # CFF Routing Layer
 
-A deterministic, four-layer plan-routing pipeline for a .NET 9 financial accounting assistant. Given a free-text user query, it selects and executes the correct pre-saved execution plan from a library of 114 plans — without relying on embedding similarity or semantic search.
+A hybrid plan-routing pipeline for a .NET 9 financial accounting assistant. Given a free-text user query, it selects and executes the correct pre-saved execution plan from a library of 114+ plans using a combination of LLM intent extraction, Titan V2 embedding similarity, structured metadata scoring, and LLM-based re-ranking.
 
 ---
 
@@ -10,28 +10,35 @@ A deterministic, four-layer plan-routing pipeline for a .NET 9 financial account
 User query
     │
     ▼
-Layer 1 — Query Understanding
-    Rule-based parser → LlmQueryParser (Bedrock fallback)
-    Produces a structured QueryIntent: domain, action, slots, temporal scope
+Phase 0 — Query Understanding
+    LlmQueryParser (Bedrock Claude Haiku, ~800 ms timeout)
+    → structured QueryIntent: domain, action, slots, temporal scope, reasoning
+    Falls back to RuleBasedQueryParser if LLM is unavailable
     │
     ▼
-Layer 2 — Plan Retrieval
-    In-memory multi-dimensional index with 4 progressive filters:
-    DomainFilter → ActionFilter → TemporalFilter → EntityFilter
-    Outputs: top-5 CandidateResults with AlignmentScore
+Phase 1 — Hybrid Plan Retrieval  [USE_HYBRID_RETRIEVAL=true]
+    HybridPlanRetriever combines:
+      55%  Titan Embeddings V2 cosine similarity (pre-built index)
+      45%  Metadata score: domain (0.35) + subdomain (0.25) + action (0.25) + temporal (0.15)
+    QueryNormalizer applied to query and plan sample queries before embedding
+    Outputs: top-10 CandidateResults ranked by combined AlignmentScore
     │
     ▼
-Layer 3 — Plan Ranking
-    FeatureAlignmentRanker scores candidates on:
-      75% base feature alignment (domain, subdomain, action, temporal, entities, output format)
-      10% output-field token overlap with query
-      15% understanding/sampleQuery text overlap with query (primary tiebreaker)
-    Ambiguous results (gap < 0.10 and top score < 0.65) → NoPlanFound
+Phase 2 — Plan Re-ranking
+    LlmPlanJudge (Bedrock Claude Haiku, batch pointwise scoring)
+    Falls back to FeatureAlignmentRanker when LLM unavailable:
+      base AlignmentScore
+      + output-field token overlap × 0.08
+      + sample-query text similarity × 0.20   (Levenshtein; primary tiebreaker)
+      − entity mismatch penalty × 0.15 each
     │
     ▼
-Layer 4 — Plan Validation
+Phase 3 — Plan Validation
     SlotCoverageValidator + SchemaCompatibilityValidator
-    Falls back to next-best candidate if validation fails
+    Falls back to next-best candidate if validation fails (up to 3 attempts)
+    │
+    ▼
+Routing decision → Execute / ConfirmAndExecute / Ambiguous / Clarify / Rejected
     │
     ▼
 PlanExecutor → step-by-step execution against CompanyDataStore
@@ -45,24 +52,28 @@ PlanExecutor → step-by-step execution against CompanyDataStore
 CffRoutingLayer.sln
 │
 ├── CffRoutingLayerDemo/          # Main application
-│   ├── Program.cs                # Interactive REPL loop
+│   ├── Program.cs                # Interactive REPL loop (Success / ConfirmAndExecute / Ambiguous / Clarify / Rejected handlers)
 │   ├── Core/
-│   │   └── PlanRoutingPipeline.cs    # Orchestrates Layers 1–4
+│   │   └── PlanRoutingPipeline.cs    # Orchestrates Phases 0–3
 │   ├── Understanding/
-│   │   ├── RuleBasedQueryParser.cs   # Deterministic parser (primary)
-│   │   ├── LlmQueryParser.cs         # Bedrock Claude fallback
+│   │   ├── RuleBasedQueryParser.cs   # Deterministic parser (Phase 0 fallback)
+│   │   ├── LlmQueryParser.cs         # Bedrock Claude intent extraction (Phase 0 primary)
+│   │   ├── QueryNormalizer.cs        # Entity normalization — applied symmetrically to queries and plan sample queries before embedding
 │   │   ├── ActionClassifier.cs       # Verb → DomainAction enum
 │   │   ├── DomainDictionary.cs       # Keyword + phrase → domain/subdomain
 │   │   ├── EntityExtractor.cs        # Slot extraction
 │   │   └── TemporalResolver.cs       # Relative date → TemporalScope
 │   ├── Index/
-│   │   ├── PlanIndex.cs              # Multi-dimensional retrieval index
-│   │   ├── PlanFeatureExtractor.cs   # Extracts PlanFeatureVector at load time
+│   │   ├── PlanIndex.cs              # Structural multi-dimensional index (used when USE_HYBRID_RETRIEVAL=false)
+│   │   ├── PlanFeatureExtractor.cs   # Extracts PlanFeatureVector at load time; InferPrimaryAction checks intent name prefix first
 │   │   └── Filters/                  # DomainFilter, ActionFilter, TemporalFilter, EntityFilter
+│   ├── Retrieval/
+│   │   ├── HybridPlanRetriever.cs    # Phase 1: embedding (55%) + metadata (45%) hybrid retrieval
+│   │   └── PlanEmbeddingIndex.cs     # Pre-built Titan V2 embeddings for all plans (built on startup)
 │   ├── Ranking/
-│   │   ├── FeatureAlignmentRanker.cs # Deterministic scorer (primary)
-│   │   ├── LlmPlanJudge.cs           # Bedrock Claude judge (optional)
-│   │   └── ScoringWeights.cs         # Tunable weights (must sum to 1.0)
+│   │   ├── FeatureAlignmentRanker.cs # Deterministic Phase 2 fallback scorer
+│   │   ├── LlmPlanJudge.cs           # Bedrock Claude Phase 2 re-ranker (primary)
+│   │   └── ScoringWeights.cs         # Tunable weights
 │   ├── Validation/
 │   │   └── CompositeValidator.cs     # Slot coverage + schema compatibility
 │   ├── Plans/
@@ -71,17 +82,18 @@ CffRoutingLayer.sln
 │   ├── Bedrock/
 │   │   ├── BedrockLlmHelper.cs       # Shared Converse API wrapper
 │   │   └── BedrockStreamingConversation.cs  # Streaming fallback for Rejected queries
-│   ├── plans/                        # 114 YAML plan files
-│   │   ├── cashflow.yaml             # cashflow-001     GenerateCashFlowReport
-│   │   ├── cashrunway.yaml           # runway-001       ForecastCashRunway
-│   │   ├── invoice.yaml              # invoice-001      CreateInvoice
-│   │   ├── listinvoices.yaml         # listinvoices-001 ListInvoices
-│   │   ├── profitaudit.yaml          # audit-001        AnalyzeProfitAnomaly
-│   │   ├── profitloss.yaml           # pl-001           GenerateProfitLoss
-│   │   ├── reconcile.yaml            # reconcile-001    ReconcileAccount
-│   │   ├── tax.yaml                  # tax-001          EstimateTaxLiability
-│   │   ├── taxoptimization.yaml      # taxopt-001       OptimizeTaxDeductions
-│   │   └── response_001..105.yaml    # 105 CFF real plans (real-001 … real-105)
+│   ├── plans/                        # 114+ YAML plan files
+│   │   ├── cashflow.yaml             # cashflow-001         GenerateCashFlowReport
+│   │   ├── cashrunway.yaml           # runway-001           ForecastCashRunway
+│   │   ├── invoice.yaml              # invoice-001          CreateInvoice
+│   │   ├── invoice-paid-total.yaml   # invoice-paid-total-001  GetTotalPaidInvoiceAmount
+│   │   ├── listinvoices.yaml         # listinvoices-001     ListInvoices
+│   │   ├── profitaudit.yaml          # audit-001            AnalyzeProfitAnomaly
+│   │   ├── profitloss.yaml           # pl-001               GenerateProfitLoss
+│   │   ├── reconcile.yaml            # reconcile-001        ReconcileAccount
+│   │   ├── tax.yaml                  # tax-001              EstimateTaxLiability
+│   │   ├── taxoptimization.yaml      # taxopt-001           OptimizeTaxDeductions
+│   │   └── response_001..109.yaml    # CFF real plans (real-001 … real-109)
 │   └── CompanyData/
 │       └── CompanyDataStore.cs       # In-memory demo financial data (DEMO-001)
 │
@@ -92,7 +104,7 @@ CffRoutingLayer.sln
 ├── CffRoutingLayerDemo.Benchmarks/
 │
 └── cff-real-plans/               # Raw CFF plan API responses (source for transformer)
-    └── response_001..105.txt
+    └── response_001..109.txt
 ```
 
 ---
@@ -105,59 +117,75 @@ CffRoutingLayer.sln
 |---|---|---|
 | Overall confidence < 0.25 | `Rejected` | Streaming LLM fallback (Bedrock) |
 | Top score < 0.35 | `NoPlanFound` | "I cannot help with that" message |
-| `IsAmbiguous` AND top score < 0.65 | `NoPlanFound` | "I cannot help with that" message |
-| Single clear winner | `Success` | Execute plan |
+| Top score ≥ 0.35 and < 0.60 | `Clarify` | Ask user to rephrase or add detail |
+| Top score ≥ 0.60, gap < `AmbiguityGap` (0.08) | `Ambiguous` | Present top candidates, ask user to choose |
+| Top score ≥ 0.60 and < 0.75, gap ≥ 0.08 | `ConfirmAndExecute` | Show plan, ask "yes/no" before executing |
+| Top score ≥ 0.75 and gap ≥ 0.08 | `Success` | Execute plan immediately |
 | Validation fails on winner | — | Try next candidate (up to 3 fallbacks) |
 
-### Layer 1 — Domain & Action detection
+### Phase 0 — LLM intent extraction (LlmQueryParser)
 
-`DomainDictionary` uses a two-tier keyword map:
+Bedrock Claude Haiku produces a structured JSON intent with:
 
-- **Phrase map** (weight 2, checked first): `"sales invoice"` → `(sales, invoicing)`, `"sales order"` → `(sales, orders)`, `"purchase order"` → `(finance, invoicing)`
-- **Keyword map** (weight 1): `"invoice"` → `(finance, invoicing)`, `"tax"` → `(finance, tax)`, `"sales"` → `(sales, orders)`, `"income"/"earnings"` → `(finance, reporting)`, etc.
+- `domain`, `subdomain`, `action`, `actionConfidence`
+- `slots`: extracted entities with confidence scores
+- `temporal`: `start`/`end` dates (ISO 8601 or null), resolved from expressions like "this quarter", "FY2025", "last month"
+- `reasoning`: brief explanation of the extraction choices
 
-`ActionClassifier` maps verb/phrase patterns to `DomainAction`:
-
-| Action | Triggers |
-|---|---|
-| `List` | show, list, display, get, fetch, find, retrieve |
-| `Create` | create, make, send, issue, build, invoice that, invoice this, invoice them |
-| `Compute` | calculate, compute, estimate, generate, run, percentage, how much, average, sum |
-| `Compare` | compare, reconcile, match, versus |
-| `Forecast` | forecast, predict, project, runway |
-| `Audit` | audit, check, verify, anomaly, detect |
-
-When `ActionConfidence ≤ 0.35` (no clear verb found), the `ActionFilter` is skipped — all action types remain as candidates.  
-When `DomainConfidence < 0.40`, the `DomainFilter` is skipped.
-
-### Layer 2 — Scoring weights
+A rich date context block is injected into every prompt:
 
 ```
-Domain          0.25
-Action          0.20
-SubDomain       0.15
-EntityCoverage  0.15
-Temporal        0.10
-Discriminator   0.10
-OutputFormat    0.05
+Today            : 2026-06-03
+Current month    : June 2026 (2026-06-01 – 2026-06-30)
+Current quarter  : Q2 2026 (2026-04-01 – 2026-06-30)
+Current FY       : FY2026 (2026-01-01 – 2026-12-31)
+Last month       : May 2026 (2026-05-01 – 2026-05-31)
+Last quarter     : Q1 2026
+Last FY          : FY2025 (2025-01-01 – 2025-12-31)
 ```
 
-Special cases:
-- Domain mismatch when `DomainConfidence < 0.40` → **0.4× partial credit** (plan stays in pool instead of being buried)
-- Action mismatch when `ActionConfidence ≤ 0.35` → **0.5× partial credit** (action was a default guess)
+LRU cache (capacity 500) and 800 ms timeout; falls back to `RuleBasedQueryParser` on timeout/error.
 
-### Layer 3 — Final score formula
+### Phase 1 — Hybrid retrieval metadata weights
+
+When `USE_HYBRID_RETRIEVAL=true` the `HybridPlanRetriever` combines embedding and metadata scores:
 
 ```
-score = baseL2Score × 0.75
-      + outputFieldOverlap × 0.10
-      + descriptionOverlap × 0.15
+Combined = embedding_cosine × 0.55 + metadata × 0.45
+
+Metadata breakdown:
+  Domain match      0.35
+  SubDomain match   0.25
+  Action match      0.25
+  Temporal match    0.15
 ```
 
-- **`outputFieldOverlap`**: fraction of query tokens (> 3 chars) found in the plan's `expectedData.summary` field names
-- **`descriptionOverlap`**: fraction of query tokens (> 3 chars) found in the plan's `understanding` text + `sampleQueries`. This is the primary tiebreaker between structurally identical candidates.
+`InferPrimaryAction` (PlanFeatureExtractor) determines each plan's action by checking the **intent name prefix first** (e.g. `List*` → `List`, `Identify*` → `List`, `Generate*` → `Compute`) before falling back to the last step's action string. This prevents the common false `Compute` inference from `compute-*` step names on plans whose purpose is retrieval.
 
-`IsAmbiguous` is true when `top1Score − top2Score < 0.10`. An ambiguous result with `topScore < 0.65` returns `NoPlanFound` rather than guessing.
+`QueryNormalizer` normalises entity tokens symmetrically on both sides of the cosine comparison:
+
+- Fiscal years, quarters, months, years → `${fiscalYear}`, `${quarter}`, `${month}`, `${year}`
+- Named entities after "for" → `${entity}`
+- ISO dates → `${date}`
+
+Phase 0 slot values (confidence ≥ 0.5) are substituted first; structural patterns applied afterwards.
+
+### Phase 2 — Re-ranking score formula (FeatureAlignmentRanker fallback)
+
+```
+score = AlignmentScore (Phase 1)
+      + outputFieldOverlap × 0.08    (bonus; up to +0.08)
+      + sampleQuerySimilarity × 0.20  (bonus; up to +0.20; Levenshtein-based)
+      − entityMismatchCount × 0.15    (penalty per unmet entity)
+```
+
+`sampleQuerySimilarity` is the best normalised Levenshtein similarity between the query and any of the plan's `sampleQueries`. This is the primary tiebreaker between structurally similar candidates.
+
+`IsAmbiguous` is true when `top1Score − top2Score < AmbiguityGap (0.08)`.
+
+### Plan YAML — required slots
+
+`RequiredInputSlots` is derived exclusively from `defaultEntities` keys. Step-level `parameters:` values are treated as static implementation config and are never required from the user. Plans declare required dynamic inputs via `defaultEntities` (with or without a default value).
 
 ---
 
@@ -205,14 +233,14 @@ steps:
 
 Key fields used by the routing pipeline:
 
-| Field | Layer | Purpose |
+| Field | Phase | Purpose |
 |---|---|---|
-| `domain` | 2 DomainFilter + scoring | Hard domain match |
-| `capabilities` | 2 EntityFilter | Tool/capability matching |
-| `understanding` | 3 descriptionOverlap | Tiebreaker scoring |
-| `sampleQueries` | 3 descriptionOverlap | Tiebreaker scoring |
-| `defaultEntities` | 4 slot coverage | Fills missing required slots |
-| `steps[].outputFields` | 3 outputFieldOverlap + 4 validation | Schema compatibility |
+| `domain` | 1 metadata scoring | Domain match (weight 0.35) |
+| `understanding` | 1 embedding text | Embedded as part of plan text |
+| `sampleQueries` | 1 embedding + 2 re-ranking | Embedded (normalised); Levenshtein tiebreaker |
+| `defaultEntities` | 3 slot coverage | Fills required slots; keys define required inputs |
+| `steps[].outputFields` | 2 outputFieldOverlap + 3 validation | Schema compatibility |
+| `capabilities` | 1 metadata | Capability/tool matching |
 
 ---
 
@@ -221,7 +249,8 @@ Key fields used by the routing pipeline:
 | Component | Technology |
 |---|---|
 | Runtime | .NET 9 / C# |
-| LLM | Amazon Bedrock — `anthropic.claude-3-haiku-20240307-v1:0` |
+| LLM (intent + ranking) | Amazon Bedrock — `anthropic.claude-3-haiku-20240307-v1:0` |
+| Embeddings | Amazon Bedrock — `amazon.titan-embed-text-v2:0` |
 | AWS SDK | `AWSSDK.BedrockRuntime 4.0.20` |
 | YAML parsing | `YamlDotNet 18.0.0` |
 | Console UI | `Spectre.Console 0.55.2` |
@@ -245,8 +274,12 @@ Create a `.env` file in the repo root (or set environment variables):
 AWS_REGION=us-east-1
 BEDROCK_LLM_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_STREAM_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+EMBEDDING_MODEL_ID=amazon.titan-embed-text-v2:0
+USE_HYBRID_RETRIEVAL=true
 USE_BEDROCK_RAG=false
 ```
+
+`USE_HYBRID_RETRIEVAL=true` (recommended): activates `HybridPlanRetriever` with Titan V2 embedding index built on startup. Set to `false` to use the structural `PlanIndex` with hard filters instead.
 
 ### Run
 
@@ -286,6 +319,8 @@ Forecast our cash runway for the next 6 months
 Invoice that customer again for $2,200
 percentage of invoices paid late
 reconcile my accounts for Q1
+calculate cashflow for company Pepe
+total amount of paid invoices this quarter
 ```
 
 ---
@@ -295,26 +330,34 @@ reconcile my accounts for Q1
 ```
 ▶ percentage of invoices paid late
   Pipeline stages:
-  ► Layer 1  Query understanding...          ✓ Compute/finance (55 %)
-  ► Layer 2  Plan retrieval...               ✓ 5 candidates
-             • real-059 (100 %)
-             • real-062 (100 %)
-             • real-041 (100 %)
-             • real-003 (100 %)
-             • invoice-001 (100 %)
-  ► Layer 3  Plan ranking...                 ✓ 5 candidates
-             • real-059 (94 %)
-             • real-062 (83 %)
+  ► Phase 0  Query understanding...          ✓ Compute/finance (88 %)
+  ► Phase 1  Hybrid retrieval...             ✓ 10 candidates
+             • real-059 (91 %)
+             • real-062 (84 %)
+             • real-041 (79 %)
              ...
-  ► Layer 4  Validation (real-059)...        ✓ Pass
-  Completed in 42 ms FRESH
+  ► Phase 2  Fine ranking...                 ✓ 10 candidates
+             • real-059 (97 %)
+             • real-062 (78 %)
+             ...
+  ► Phase 3  Validation (real-059)...        ✓ Pass
+  Completed in 1 200 ms
   ► Execute  Running plan real-059...
 ```
 
-Layer 1 also prints detected slots and temporal scope when present:
+Phase 0 also prints detected slots and temporal scope when present:
 
 ```
-  ► Layer 1  Query understanding...          ✓ List/finance (35 %)
-             temporal: this month
+  ► Phase 0  Query understanding...          ✓ List/finance (72 %)
+             temporal: this month  →  2026-06-01 – 2026-06-30
              slot: companyId = "DEMO-001" (80 %)
+             reasoning: "user asked to list invoices; 'this month' resolved to current calendar month"
+```
+
+When the top plan needs confirmation (`ConfirmAndExecute`):
+
+```
+  ● Routing status: ConfirmAndExecute (76 %)
+    Top plan: cashflow-001 — GenerateCashFlowReport
+    Proceed? [yes/no]:
 ```
