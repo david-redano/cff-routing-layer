@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Determine whether any customers have sales quotes in Pending status only (no other statuses)"
+description: "Fetch all pending quotes with status filter, then validate that each customer appears ONLY in pending quotes (not in closed/declined). Return yes/no validation result in Text Summary"
 expectedData:
   summary:
     - HasOnlyPendingClients

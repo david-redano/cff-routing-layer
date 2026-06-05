@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Calculate the total monetary amount across all sales quotes"
+description: "Fetch all quotes with default 1-year rolling-window date range (TodaysDate minus 1 year to TodaysDate per Specialized Rule), sum total_amount , return Text summary with period fields"
 expectedData:
   summary:
     - TotalQuotes

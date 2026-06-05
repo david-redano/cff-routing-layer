@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Identify which single day had the highest number of sales orders placed"
+description: "Fetch all sales orders with ${period} date range (default), group by order date , count orders per day, identify the day with maximum count, and return as Text summary"
 expectedData:
   summary:
     - MostActiveDay

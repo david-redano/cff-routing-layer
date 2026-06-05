@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes grouped by month"
+description: "Fetch all sales quotes using default financial-year date range (${date} to ${date} per calendar-year fallback), group by month , return LineChart+Table showing monthly quote counts with supporting detail records"
 expectedData:
   summary:
     - TotalQuotes

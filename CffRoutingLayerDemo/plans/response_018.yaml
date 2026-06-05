@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Identify the single sales order with the highest monetary value"
+description: "Fetch all sales orders with ${period} date range, sort by total_amount descending , extract the top entry, and return as Text summary with order details"
 expectedData:
   summary:
     - OrderReference

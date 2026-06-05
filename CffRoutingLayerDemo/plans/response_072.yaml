@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Show the count of sales quotes created on each day"
+description: "Fetch all sales quotes with default financial-year date range, group by creation date , count quotes per day, sort chronologically, cap at 24 days for LineChart, render as LineChart+Table to show trend with supporting detail"
 expectedData:
   summary:
     - TotalQuotes

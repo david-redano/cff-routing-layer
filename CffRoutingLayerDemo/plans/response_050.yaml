@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Identify which day has the most sales invoice activity across all available data"
+description: "Fetch all sales invoices with broadest date range (financial year default), group by invoice date , count invoices per day, identify day with maximum count, and return as Text summary with supporting detail"
 expectedData:
   summary:
     - MostActiveDay

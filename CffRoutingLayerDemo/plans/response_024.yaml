@@ -7,6 +7,7 @@ capabilities:
   - sales-customers
   - sales-orders
 understanding: "List all sales orders for the customer Bonarea Energia Sl"
+description: "Search for customer 'Bonarea Energia Sl' to obtain the customer ID, validate a single match , then fetch all sales orders for that customer using a broad date range (${period}), and return as a Table with order details"
 expectedData:
   summary:
     - CustomerName

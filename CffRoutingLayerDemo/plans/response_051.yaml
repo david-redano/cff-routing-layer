@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Show all customers ranked by their quote approval percentage (highest to lowest)"
+description: "Fetch all sales quotes with broadest date range (current FY), aggregate by customer to compute approval rate (Closed ÷ Total), sort descending by rate, render as BarChart+Table for visual comparison with detail breakdown"
 expectedData:
   summary:
     - TotalCustomers

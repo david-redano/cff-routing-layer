@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Calculate the percentage of sales quotes issued ${period} that were accepted (converted to Closed status)"
+description: "Fetch all quotes issued ${period} ${year} , filter by Closed status to identify accepted quotes, calculate acceptance rate as (Closed count ÷ Total count × 100), return as Text Summary with the percentage and supporting counts"
 expectedData:
   summary:
     - AcceptancePercentage

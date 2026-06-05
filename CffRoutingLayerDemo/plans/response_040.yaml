@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the lowest closing rate (ratio of closed/converted quotes to total quotes)"
+description: "Fetch all sales quotes with default 1-year date range, group by customer , calculate closing rate (Closed ÷ Total) per customer, identify the customer with the minimum rate, return as Text with single-entity superlative format (top entity name/ID, TieCount, metric value)"
 expectedData:
   summary:
     - WorstCustomerName

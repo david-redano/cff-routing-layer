@@ -5,23 +5,22 @@ using System.Text.RegularExpressions;
 using CffRoutingLayerDemo.Queries;
 
 /// <summary>
-/// Normalizes query text by replacing entity values with typed slot placeholders
+/// Normalizes query text by replacing TEMPORAL tokens with typed placeholders
 /// BEFORE embedding. Applied symmetrically to:
 ///   • Plan sample queries at index build time (NormalizeSampleQuery)
 ///   • Incoming queries at retrieval time      (NormalizeWithSlots)
 ///
-/// This ensures entity-variant queries ("cashflow for Pepe" vs "cashflow for Acme")
-/// collapse to the same semantic vector and match the plan regardless of the
-/// specific entity value the user provided.
-///
-/// Inspired by the ensemble entity-extraction approach described in GenPlanX [21]:
-/// company ids, customer names, dates, fiscal years, periods, and other
-/// domain-specific identifiers are lifted out before semantic comparison.
+/// Only temporal tokens (fiscal years, quarters, months, bare years, ISO dates)
+/// are normalized. Named entity values (customer names, invoice IDs, etc.) are
+/// intentionally left as-is: normalizing them collapses distinct semantic meaning
+/// and produces worse embedding similarity when the plan text retains the original
+/// natural-language phrasing.
 /// </summary>
 public static class QueryNormalizer
 {
-    // ── Structural patterns applied to both plan queries and incoming queries ──
-    // Ordered: longer/more-specific patterns first to prevent partial replacements.
+    // ── Temporal-only patterns applied to both plan queries and incoming queries ──
+    // Entity names (customers, vendors, invoice IDs, etc.) are NOT normalized here;
+    // doing so hurts embedding similarity by collapsing semantically distinct text.
     private static readonly (Regex Pattern, string Placeholder)[] StructuralPatterns =
     [
         // Fiscal year:  FY2024, FY2025
@@ -39,15 +38,6 @@ public static class QueryNormalizer
         // 4-digit year (after FY already consumed):  2024, 2025, 2026
         (new Regex(@"\b20\d{2}\b", RegexOptions.Compiled), "${year}"),
 
-        // "for company Pepe", "for customer Marc", "for client Acme" (single word)
-        (new Regex(
-            @"\bfor\s+(?:company|customer|client|firm|supplier)\s+[A-Za-z][A-Za-z0-9\-]*\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled),
-         "for ${entity}"),
-
-        // "for Acme Corp", "for Pepe Industries" (title-case multi-word)
-        (new Regex(@"\bfor\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", RegexOptions.Compiled), "for ${entity}"),
-
         // ISO / partial dates:  2024-01-01, 01/2024, 2024/01
         (new Regex(@"\b\d{4}[-/]\d{2}(?:[-/]\d{2})?\b|\b\d{2}[-/]\d{4}\b", RegexOptions.Compiled), "${date}"),
     ];
@@ -55,8 +45,8 @@ public static class QueryNormalizer
     // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Normalize a plan's sample query, replacing known entity patterns with typed
-    /// placeholders. Used when building plan embedding text so all entity variants
+    /// Normalize a plan's sample query, replacing temporal tokens with typed
+    /// placeholders. Used when building plan embedding text so temporal variants
     /// (e.g. "March", "April", "FY2025") map to the same embedding.
     /// </summary>
     public static string NormalizeSampleQuery(string query)
@@ -68,33 +58,21 @@ public static class QueryNormalizer
     }
 
     /// <summary>
-    /// Normalize an incoming query using slots already extracted by Phase 0.
-    /// First replaces slot values extracted by the LLM (highest fidelity), then
-    /// applies the same structural patterns as <see cref="NormalizeSampleQuery"/>.
+    /// Normalize an incoming query by replacing temporal tokens with typed placeholders.
+    /// Entity slot values (customer names, IDs, etc.) are intentionally NOT replaced —
+    /// keeping them in the query text produces better embedding similarity against
+    /// plans whose understanding/sample-query text also retains the natural phrasing.
+    /// The <paramref name="slots"/> parameter is accepted but unused; it remains in the
+    /// signature so call sites do not need to change.
     /// </summary>
     public static string NormalizeWithSlots(string query, IEnumerable<QuerySlot> slots)
     {
         var result = query;
 
-        // 1. Replace extracted slot values with ${slotName} — longest values first
-        //    to avoid partial token replacements (e.g. "Pepe Industries" before "Pepe").
-        foreach (var slot in slots
-            .Where(s => s.Confidence >= 0.5f && !string.IsNullOrWhiteSpace(s.Value))
-            .OrderByDescending(s => s.Value.Length))
-        {
-            result = ReplaceIgnoreCase(result, slot.Value, $"${{{slot.Name}}}");
-        }
-
-        // 2. Apply structural patterns for anything the LLM didn't explicitly extract.
+        // Apply temporal-only structural patterns.
         foreach (var (pattern, placeholder) in StructuralPatterns)
             result = pattern.Replace(result, placeholder);
 
         return result;
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static string ReplaceIgnoreCase(string source, string search, string replacement) =>
-        Regex.Replace(source, Regex.Escape(search), Regex.Escape(replacement).Replace(@"\$", "$"),
-            RegexOptions.IgnoreCase);
 }

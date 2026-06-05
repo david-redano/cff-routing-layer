@@ -7,6 +7,7 @@ capabilities:
   - sales-quotes
   - analysis-aggregation
 understanding: "Identify which products have the highest percentage of quotes containing them that were accepted and converted to orders"
+description: "Fetch all sales quotes with current FY date range, then use to compute acceptance rate (Closed quotes ÷ Total quotes) grouped by product. Rank by acceptance rate descending, cap at 12 products for BarChart, return as BarChart+Table showing product names with their acceptance percentages and supporting counts"
 expectedData:
   summary:
     - TotalProducts

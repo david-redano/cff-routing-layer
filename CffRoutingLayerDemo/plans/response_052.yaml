@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customers have accepted the most sales quotes (converted Closed quotes) and rank them by count"
+description: "Fetch all sales quotes with Closed status in current FY, group by customer , count per customer, sort descending, cap chart at 12 entries; render as BarChart+Table so the chart ranks customers and the table provides navigable detail with customer links"
 expectedData:
   summary:
     - TotalCustomers

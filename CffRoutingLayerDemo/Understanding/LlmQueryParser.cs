@@ -18,6 +18,7 @@ public sealed class LlmQueryParser : IQueryParser
         Given a user query, extract the following as JSON (respond ONLY with valid JSON, no markdown):
 
         {
+          "query": "rewritten standalone sentence for THIS task only — required when subIntents is non-empty, omit otherwise",
           "primaryAction": "List|Create|Compute|Compare|Forecast|Audit|Categorize|Optimize",
           "domain": "sales|finance|inventory|hr|general",
           "subDomain": "cashflow|invoicing|reconciliation|tax|reporting|forecasting|orders|crm|stock|payroll|audit|unknown",
@@ -72,6 +73,17 @@ public sealed class LlmQueryParser : IQueryParser
             category        — expense or revenue category
         - For any concept not in the canonical list, use a short camelCase name of your choosing.
 
+        Slot extraction rules — CRITICAL:
+        - Only extract entity slots for EXPLICITLY NAMED entities: proper nouns, specific IDs, account codes, or names.
+        - NEVER extract descriptive, comparative, or superlative phrases as slot values.
+          Descriptive qualifiers after "with", "that has", "having" describe a filter, not an entity name.
+          WRONG: { "name": "customer", "value": "more balance" }   ← "more balance" is not a customer name
+          WRONG: { "name": "vendor",   "value": "largest invoice" } ← "largest invoice" is not a vendor name
+          RIGHT: { "name": "customer", "value": "Acme Corp" }       ← explicit proper noun
+          RIGHT: { "name": "customer", "value": "CUST-042" }        ← explicit identifier
+        - Phrases like "with more balance", "with the highest revenue", "with most activity" belong in
+          `constraints`, not in `entities`. If no explicit name is given for a slot, do not emit that slot.
+
         Comparison query rules (applies when query contains "vs", "versus", "compared to", "year over year", "YoY", "month over month", "MoM", or "this X vs last X"):
         - Set `primaryAction` to "Compare" and `expectedOutput` to "Comparison".
         - Put the PRIMARY window in `period` (the "current" or first-mentioned period).
@@ -94,7 +106,10 @@ public sealed class LlmQueryParser : IQueryParser
         - When detected:
             * The ROOT intent fields (`primaryAction`, `domain`, `subDomain`, `entities`, `temporal`, etc.)
               MUST describe the FIRST independent task only — rewrite its fields to match only that task.
-            * Set the root `query` field (if present) to an isolated standalone sentence for the first task.
+            * REQUIRED: set the root `query` field to a standalone sentence for the FIRST task only.
+              Example: "show me the upcoming sales payments and list the customer with more balance"
+              → root query: "show me the upcoming sales payments"
+              → subIntent query: "list the customer with more balance"
             * Populate `subIntents` with ONE entry per ADDITIONAL independent task (second, third, …).
             * Do NOT repeat the first task inside `subIntents`.
         - Each subIntent element has these fields:
@@ -205,7 +220,12 @@ public sealed class LlmQueryParser : IQueryParser
     private QueryIntent ParseJson(string json, string rawQuery)
     {
         using var doc = JsonDocument.Parse(json);
-        return ParseIntentElement(doc.RootElement, rawQuery);
+        var root = doc.RootElement;
+        // When the LLM rewrites the root query to isolate the first task in a multi-intent split,
+        // prefer that rewritten text over the full original query.  This ensures Phase 1 embedding
+        // targets only the first task and avoids the first sub-intent overlapping with the second.
+        var effectiveQuery = root.GetStringOrDefault("query") is { Length: > 0 } q ? q : rawQuery;
+        return ParseIntentElement(root, effectiveQuery);
     }
 
     private QueryIntent ParseIntentElement(JsonElement root, string rawQuery)

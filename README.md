@@ -29,7 +29,7 @@ Phase 2 — Plan Re-ranking
     Falls back to FeatureAlignmentRanker when LLM unavailable:
       base AlignmentScore
       + output-field token overlap × 0.08
-      + sample-query text similarity × 0.20   (Levenshtein; primary tiebreaker)
+      + descriptionRelevance × 0.20   (Levenshtein + keyword-coherence guard)
       − entity mismatch penalty × 0.15 each
     │
     ▼
@@ -58,7 +58,7 @@ CffRoutingLayer.sln
 │   ├── Understanding/
 │   │   ├── RuleBasedQueryParser.cs   # Deterministic parser (Phase 0 fallback)
 │   │   ├── LlmQueryParser.cs         # Bedrock Claude intent extraction (Phase 0 primary)
-│   │   ├── QueryNormalizer.cs        # Entity normalization — applied symmetrically to queries and plan sample queries before embedding
+│   │   ├── QueryNormalizer.cs        # Temporal token normalization — applied symmetrically to queries and plan sample queries before embedding (entity names intentionally left as-is)
 │   │   ├── ActionClassifier.cs       # Verb → DomainAction enum
 │   │   ├── DomainDictionary.cs       # Keyword + phrase → domain/subdomain
 │   │   ├── EntityExtractor.cs        # Slot extraction
@@ -115,8 +115,9 @@ CffRoutingLayer.sln
 
 | Condition | Status | Action |
 |---|---|---|
-| Overall confidence < 0.25 | `Rejected` | Streaming LLM fallback (Bedrock) |
-| Top score < 0.35 | `NoPlanFound` | "I cannot help with that" message |
+| Phase 0 confidence < 0.28 (`MinPhase0Confidence`) | `Rejected` | Streaming LLM fallback (Bedrock) — no retrieval attempted |
+| Phase 1 top score < 0.45 (`MinPhase1Score`) | `NoPlanFound` | No plan confident enough to rank |
+| Top score < 0.35 (`RejectThreshold`) | `Rejected` | "No plan found" message |
 | Top score ≥ 0.35 and < 0.60 | `Clarify` | Ask user to rephrase or add detail |
 | Top score ≥ 0.60, gap < `AmbiguityGap` (0.08) | `Ambiguous` | Present top candidates, ask user to choose |
 | Top score ≥ 0.60 and < 0.75, gap ≥ 0.08 | `ConfirmAndExecute` | Show plan, ask "yes/no" before executing |
@@ -162,26 +163,57 @@ Metadata breakdown:
 
 `InferPrimaryAction` (PlanFeatureExtractor) determines each plan's action by checking the **intent name prefix first** (e.g. `List*` → `List`, `Identify*` → `List`, `Generate*` → `Compute`) before falling back to the last step's action string. This prevents the common false `Compute` inference from `compute-*` step names on plans whose purpose is retrieval.
 
-`QueryNormalizer` normalises entity tokens symmetrically on both sides of the cosine comparison:
+`QueryNormalizer` normalises **temporal** tokens symmetrically on both sides of the cosine comparison (applied to both plan sample queries at build time and incoming queries at retrieval time):
 
-- Fiscal years, quarters, months, years → `${fiscalYear}`, `${quarter}`, `${month}`, `${year}`
-- Named entities after "for" → `${entity}`
-- ISO dates → `${date}`
+- Fiscal years → `${fiscalYear}` (e.g. `FY2024`)
+- Month names → `${month}` (e.g. `March`)
+- Calendar quarters → `${quarter}` (e.g. `Q2`)
+- 4-digit years → `${year}` (e.g. `2024`)
+- ISO / partial dates → `${date}` (e.g. `2024-01-01`)
 
-Phase 0 slot values (confidence ≥ 0.5) are substituted first; structural patterns applied afterwards.
+Named entity values (customer names, invoice IDs, etc.) are intentionally **not** normalized — replacing them with generic placeholders collapses distinct semantic meaning and degrades embedding similarity.
 
 ### Phase 2 — Re-ranking score formula (FeatureAlignmentRanker fallback)
 
 ```
 score = AlignmentScore (Phase 1)
-      + outputFieldOverlap × 0.08    (bonus; up to +0.08)
-      + sampleQuerySimilarity × 0.20  (bonus; up to +0.20; Levenshtein-based)
-      − entityMismatchCount × 0.15    (penalty per unmet entity)
+      + outputFieldOverlap    × 0.08    (bonus; up to +0.08)
+      + descriptionRelevance  × 0.20    (bonus; up to +0.20)
+      − entityMismatchCount   × 0.15    (penalty per unmet entity)
 ```
 
-`sampleQuerySimilarity` is the best normalised Levenshtein similarity between the query and any of the plan's `sampleQueries`. This is the primary tiebreaker between structurally similar candidates.
+`descriptionRelevance` is computed as follows:
+- Best normalised Levenshtein edit similarity between the query and any of the plan's `sampleQueries`
+- Falls back to corpus keyword overlap against `understanding` text when no sample queries exist
+- **Keyword-coherence guard**: result is scaled by `0.25 + 0.75 × keywordCoverage`, where `keywordCoverage` is the fraction of the query's content words (len > 4, non-stop-word) present in the plan's combined `understanding` + `sampleQueries` text. This prevents a plan with coincidental surface similarity from outscoring a semantically correct plan.
 
 `IsAmbiguous` is true when `top1Score − top2Score < AmbiguityGap (0.08)`.
+
+### Multi-intent routing
+
+When Phase 0 returns a `QueryIntent` with `SubIntents.Count > 0` (the LLM detected a compound query), `PlanRoutingPipeline` routes each sub-intent independently through Phases 1–3:
+
+- The root intent describes the **first** task; `SubIntents` contains the additional tasks.
+- Each sub-intent runs the full Phase 1 → Phase 2 → Phase 3 pipeline independently.
+- Sub-intents that return `Success` **or** `ConfirmAndExecute` are collected — the per-sub-intent confirmation gate is suppressed in batch context since the plan has already passed Phase 3 validation.
+- If at least one sub-intent routes successfully the decision is `MultiSuccess`; failed sub-intents are logged as notes but do not block the successful ones.
+- If every sub-intent fails routing the decision is `NoPlanFound`.
+
+Example console output for a compound query:
+
+```
+  ► Multi-intent: 2 tasks detected
+  ┌ Sub-intent: show me the upcoming sales payments
+  ► Phase 1  Hybrid retrieval...             ✓ 10 candidates
+  ► Phase 2  Fine ranking...                 ✓ 10 candidates
+  ► Phase 3  Validation (real-042)...        ✓ Pass
+  ┌ Sub-intent: list the customer with more balance
+  ► Phase 1  Hybrid retrieval...             ✓ 10 candidates
+  ► Phase 2  Fine ranking...                 ✓ 10 candidates
+  ► Phase 3  Validation (real-031)...        ✓ Pass
+  ► Execute  Sub-task 1/2  Running plan real-042...
+  ► Execute  Sub-task 2/2  Running plan real-031...
+```
 
 ### Plan YAML — required slots
 
@@ -237,6 +269,7 @@ Key fields used by the routing pipeline:
 |---|---|---|
 | `domain` | 1 metadata scoring | Domain match (weight 0.35) |
 | `understanding` | 1 embedding text | Embedded as part of plan text |
+| `description` | 1 embedding text | Stripped Approach field — adds computation vocabulary (e.g. "aggregate by customer") not always present in `understanding`; embedded between `understanding` and `sampleQueries` |
 | `sampleQueries` | 1 embedding + 2 re-ranking | Embedded (normalised); Levenshtein tiebreaker |
 | `defaultEntities` | 3 slot coverage | Fills required slots; keys define required inputs |
 | `steps[].outputFields` | 2 outputFieldOverlap + 3 validation | Schema compatibility |
@@ -348,7 +381,7 @@ total amount of paid invoices this quarter
 Phase 0 also prints detected slots and temporal scope when present:
 
 ```
-  ► Phase 0  Query understanding...          ✓ List/finance (72 %)
+  ► Phase 0  Intent extraction...            ✓ List/finance (72 %)
              temporal: this month  →  2026-06-01 – 2026-06-30
              slot: companyId = "DEMO-001" (80 %)
              reasoning: "user asked to list invoices; 'this month' resolved to current calendar month"

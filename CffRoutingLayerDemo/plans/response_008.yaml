@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Show total sales order value grouped by month"
+description: "Fetch all sales orders with ${period} date range (${date} to ${date}), group by month , sum total_amount per month, sort chronologically, cap at 24 months, render as LineChart+Table for trend visualization with supporting detail"
 expectedData:
   summary:
     - TotalOrders

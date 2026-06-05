@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customer received the highest-value sales quote and report that quote amount"
+description: "Fetch all sales quotes using default financial-year date range, find the quote with maximum total_amount , extract customer name and amount, return as Text Summary"
 expectedData:
   summary:
     - CustomerName

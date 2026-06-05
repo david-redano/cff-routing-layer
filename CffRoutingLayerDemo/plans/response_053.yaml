@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the highest number of pending sales quotes"
+description: "Fetch all pending sales quotes with status=Pending for current FY, group by customer , count quotes per customer, sort descending, identify the top customer; return as Text Summary with customer name and quote count"
 expectedData:
   summary:
     - TopCustomerName

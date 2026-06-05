@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Identify which sales order has the highest total monetary amount"
+description: "Fetch all sales orders with ${period} date range (default), find the order with maximum total_amount , return Text summary with order details"
 expectedData:
   summary:
     - OrderReference

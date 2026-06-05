@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Find the oldest sales quote by issue date"
+description: "Fetch all sales quotes with default financial-year date range, sort by date ascending to identify the earliest quote, return Text summary with quote details"
 expectedData:
   summary:
     - QuoteReference

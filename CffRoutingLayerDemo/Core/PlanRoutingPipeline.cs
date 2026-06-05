@@ -136,7 +136,12 @@ public sealed class PlanRoutingPipeline
                 Console.ResetColor();
 
                 var subDecision = await RouteIntentAsync(sub, layers, notes, BuildTrace, ct);
-                if (subDecision.Status == RoutingStatus.Success && subDecision.SelectedPlan is not null)
+                // Accept both Success and ConfirmAndExecute: in a multi-intent batch the
+                // individual sub-tasks have already been validated (Phase 3 Pass), so the
+                // confirmation gate is redundant and would silently drop the sub-task.
+                if (subDecision.SelectedPlan is not null &&
+                    (subDecision.Status == RoutingStatus.Success ||
+                     subDecision.Status == RoutingStatus.ConfirmAndExecute))
                     plans.Add(subDecision.SelectedPlan);
                 else
                     failed.Add($"\"{sub.RawQuery}\" → {subDecision.Message}");

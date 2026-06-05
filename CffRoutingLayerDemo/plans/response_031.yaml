@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Count the number of sales orders created on ${date}"
+description: "Fetch sales orders with date_from and date_to both set to ${date} (single day), count the results , return Text summary with order count"
 expectedData:
   summary:
     - OrderCount

@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Compare total sales order amounts ${period}"
+description: "Fetch sales orders for March ${year} and April ${year} via two calls, aggregate totals per month , calculate the difference, and return as Text summary with comparison metrics"
 expectedData:
   summary:
     - MarchTotal

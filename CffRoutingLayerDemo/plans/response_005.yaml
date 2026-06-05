@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "User wants to know which invoice has the highest amount"
+description: "Fetch all sales invoices using ${period} date range, then find the invoice with maximum total_amount and return its details as Text Summary"
 expectedData:
   summary:
     - InvoiceReference

@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Check all sales quotes from the ${period} to identify any gaps in the quote numbering sequence"
+description: "Fetch all quotes for the ${period} (${period}: ${date} to ${date}) with broad pagination, extract reference numbers , sort numerically, detect gaps by comparing consecutive values, and return a Text summary identifying missing quote numbers or confirming no gaps exist"
 expectedData:
   summary:
     - TotalQuotes

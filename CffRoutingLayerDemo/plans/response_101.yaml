@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Calculate the total monetary amount across all sales quotes with pending approval status"
+description: "Fetch all sales quotes filtered to Pending status in ${period}, sum total_amount , return Text summary with aggregated value and count"
 expectedData:
   summary:
     - QuoteCount

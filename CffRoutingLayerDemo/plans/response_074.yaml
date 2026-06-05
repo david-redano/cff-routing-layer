@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which calendar day has the highest number of sales quotes created across all time"
+description: "Fetch all sales quotes with a broad date range (${period}), group by creation date , count quotes per day, identify the day with maximum count, and return as Text summary with the date and count"
 expectedData:
   summary:
     - DayWithMostQuotes

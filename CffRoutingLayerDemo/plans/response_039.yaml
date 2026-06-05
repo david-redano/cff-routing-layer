@@ -6,6 +6,7 @@ displayName: Analysis Agent
 capabilities:
   - analysis-aggregation
 understanding: "Identify which customer has the highest closing rate (converted quotes divided by total quotes)"
+description: "Fetch all sales quotes grouped by customer_id with metric total count and status filtering, then calculate closing rate per customer (Closed ÷ Total), rank descending, return top customer as Text with TieCount for ties"
 expectedData:
   summary:
     - TopCustomerName

@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "List all sales orders with ref ${refId} to help user identify the correct one"
+description: "Fetch sales orders with no customer filter (broadest scope) and no status filter, then filter to those matching reference '0003', return as Table for user selection"
 expectedData:
   summary:
     - OrderCount

@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Show the total quoted amount for each client"
+description: "Fetch all sales quotes using default financial-year date range, group by customer , sum total_amount per customer, sort descending, cap chart at 12 entries; render as BarChart+Table so the chart compares customers and the table provides navigable detail with customer links"
 expectedData:
   summary:
     - TotalCustomers

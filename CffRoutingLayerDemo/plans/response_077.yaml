@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the highest number of closed sales quotes"
+description: "Fetch all closed quotes with status filter, group by customer , count per customer, sort descending, return top customer as Text summary"
 expectedData:
   summary:
     - TopCustomerName

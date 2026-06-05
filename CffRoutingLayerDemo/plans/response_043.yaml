@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Calculate what percentage of all sales quotes have a Closed status"
+description: "Fetch all quotes using default 1-year rolling window per Specialized Rule, count total quotes and closed quotes , calculate percentage, return Text summary with the metric"
 expectedData:
   summary:
     - TotalQuotes

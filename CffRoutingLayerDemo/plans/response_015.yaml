@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Identify which customers have placed the most orders and rank them"
+description: "Fetch all sales orders with broadest date range (${period}), group by customer , count orders per customer, sort descending, cap at 12 for chart display; render as BarChart+Table for visual ranking with navigable detail"
 expectedData:
   summary:
     - TotalCustomers

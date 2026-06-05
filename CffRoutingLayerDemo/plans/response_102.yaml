@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes with Pending status (awaiting customer response)"
+description: "Fetch all pending quotes with status filter and default financial-year date range, count results , return Text summary with quote count"
 expectedData:
   summary:
     - QuotesInProgress

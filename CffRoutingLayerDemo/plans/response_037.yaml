@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Count the total number of sales orders"
+description: "Fetch all sales orders with broadest date range (${period}, defaulting to calendar year ${date} to ${date}), then count the results and return as Text Summary"
 expectedData:
   summary:
     - OrderCount

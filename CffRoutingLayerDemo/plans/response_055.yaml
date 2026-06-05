@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Determine whether any single day has more than one sales quote issued"
+description: "Fetch all sales quotes using default financial-year date range, group by issue date , identify dates with count > 1, return yes/no validation result in Text Summary"
 expectedData:
   summary:
     - HasMultipleQuotesPerDay

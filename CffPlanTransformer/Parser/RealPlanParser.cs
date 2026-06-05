@@ -16,8 +16,7 @@ internal static class RealPlanParser
     // ── Reasoning regex patterns ────────────────────────────────────────────
 
     private static readonly Regex RxCategory    = new(@"Request:\s*\{Cat:\s*(\w+)", RegexOptions.Compiled);
-    private static readonly Regex RxUnderstand  = new(@"Understanding:\s*""([^""]+)""", RegexOptions.Compiled);
-    private static readonly Regex RxLayout      = new(@"Layout:\s*\{Type:\s*([^,}]+)", RegexOptions.Compiled);
+    private static readonly Regex RxUnderstand  = new(@"Understanding:\s*""([^""]+)""", RegexOptions.Compiled);    private static readonly Regex RxApproach    = new(@"Approach:\s*\""([^\""]+)\""", RegexOptions.Compiled);    private static readonly Regex RxLayout      = new(@"Layout:\s*\{Type:\s*([^,}]+)", RegexOptions.Compiled);
     // Matches: Step1: {Name: some_tool_name, Id: "uuid"}
     private static readonly Regex RxTool        = new(@"(Step\d+):\s*\{Name:\s*([\w]+),\s*Id:\s*""([^""]+)""\}", RegexOptions.Compiled);
     // Summary: [Field1, Field2, ...]
@@ -61,6 +60,9 @@ internal static class RealPlanParser
 
         m = RxUnderstand.Match(block);
         if (m.Success) plan.Understanding = m.Groups[1].Value.Trim();
+
+        m = RxApproach.Match(block);
+        if (m.Success) plan.Approach = m.Groups[1].Value.Trim();
 
         m = RxLayout.Match(block);
         if (m.Success) plan.Layout = m.Groups[1].Value.Trim();

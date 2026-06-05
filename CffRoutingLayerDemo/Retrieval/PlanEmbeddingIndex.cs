@@ -53,6 +53,9 @@ public sealed class PlanEmbeddingIndex
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(plan.Understanding))
             sb.AppendLine(QueryNormalizer.NormalizeSampleQuery(plan.Understanding));
+        // Description (stripped Approach) adds computation vocabulary not in Understanding.
+        if (!string.IsNullOrWhiteSpace(plan.Description))
+            sb.AppendLine(QueryNormalizer.NormalizeSampleQuery(plan.Description));
         foreach (var sq in plan.SampleQueries)
             sb.AppendLine(QueryNormalizer.NormalizeSampleQuery(sq));
         if (!string.IsNullOrWhiteSpace(plan.Domain))

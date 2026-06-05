@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Calculate the conversion rate as a percentage: number of closed sales quotes divided by total sales quotes"
+description: "Fetch all sales quotes with default financial-year date range, filter by status (Closed vs all) , compute the ratio (Closed ÷ Total × 100), and return as Text Summary with the percentage metric"
 expectedData:
   summary:
     - ConversionRate

@@ -6,6 +6,7 @@ displayName: Analysis Agent
 capabilities:
   - analysis-aggregation
 understanding: "Identify which customer has the highest number of quotes and which has the lowest number of quotes"
+description: "Fetch all sales quotes grouped by customer_id to count quotes per customer, sort descending and ascending to identify top and bottom, return as BarChart+Table showing the comparison with supporting detail"
 expectedData:
   summary:
     - TopCustomer

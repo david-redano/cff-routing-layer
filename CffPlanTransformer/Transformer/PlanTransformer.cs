@@ -83,11 +83,19 @@ internal static class PlanTransformer
         // and "last 200 days" produce the same vector as "last ${period}").
         var normUnderstanding = NormalizeUnderstanding(plan.Understanding);
 
+        // Approach: strip tool-name tokens and step-type phrases; keep only the
+        // conceptual computation description for richer embedding signal.
+        var normDescription = string.IsNullOrWhiteSpace(plan.Approach)
+            ? ""
+            : StripApproach(plan.Approach);
+
         sb.AppendLine("capabilities:");
         foreach (var cap in capabilities)
             sb.AppendLine($"  - {cap}");
 
         sb.AppendLine($"understanding: \"{EscapeYaml(normUnderstanding)}\"");
+        if (!string.IsNullOrWhiteSpace(normDescription))
+            sb.AppendLine($"description: \"{EscapeYaml(normDescription)}\"");
 
         sb.AppendLine("expectedData:");
         sb.AppendLine("  summary:");
@@ -252,6 +260,39 @@ internal static class PlanTransformer
     private static readonly Regex RxAmountInText = new(
         @"[\$€£¥][\d,]+(?:\.\d+)?(?:[MmKk])?",
         RegexOptions.Compiled);
+
+    // ── Approach stripping ───────────────────────────────────────────────────
+    // Removes implementation noise from the Approach field while keeping
+    // the conceptual computation description useful for semantic search.
+
+    // snake_case tool names after "via" (e.g. "via sales_list_customers")
+    private static readonly Regex RxViaTool = new(
+        @"\bvia\s+[a-z][a-z0-9]*(?:_[a-z0-9]+)+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // "in a Code step", "in a Code step", "in Code step", "a Code step"
+    private static readonly Regex RxCodeStep = new(
+        @"\bin\s+a?\s*Code\s+step\b",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Bare snake_case identifiers that look like tool names (≥2 underscores)
+    // e.g. accounting_get_trial_balance but NOT "sort_descending" (kept for context)
+    private static readonly Regex RxToolName = new(
+        @"\b[a-z][a-z0-9]*(?:_[a-z0-9]+){2,}\b",
+        RegexOptions.Compiled);
+
+    private static string StripApproach(string approach)
+    {
+        var text = approach;
+        text = RxViaTool.Replace(text, "");
+        text = RxCodeStep.Replace(text, "");
+        text = RxToolName.Replace(text, "");
+        // Collapse multiple spaces and clean up punctuation artefacts like ", ," or "( )"
+        text = Regex.Replace(text, @"\(\s*\)", "");
+        text = Regex.Replace(text, @",\s*,", ",");
+        text = Regex.Replace(text, @"\s{2,}", " ");
+        return NormalizeUnderstanding(text.Trim(' ', ',', '.'));
+    }
 
     private static string NormalizeUnderstanding(string understanding)
     {

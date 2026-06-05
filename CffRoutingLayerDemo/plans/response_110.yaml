@@ -6,6 +6,7 @@ displayName: Accounting Agent
 capabilities:
   - accounting-get-income-statement-es
 understanding: "Calculate estimated tax provision based on current pre-tax income"
+description: "Fetch Income Statement to obtain pre-tax income , then apply a standard tax rate assumption to estimate tax provision. Return as Text Summary with the calculated tax estimate"
 expectedData:
   summary:
     - PreTaxIncome

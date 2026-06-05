@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Count the number of sales orders placed during the current month"
+description: "Fetch all sales orders for the current month (May ${year}) with date_from and date_to set to month boundaries, then count the results and return as Text Summary"
 expectedData:
   summary:
     - OrderCount

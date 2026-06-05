@@ -10,6 +10,13 @@ internal sealed class RealPlan
     /// <summary>Free-text description of what the plan does.</summary>
     public string Understanding { get; set; } = "";
 
+    /// <summary>
+    /// High-level implementation approach from the Reasoning block.
+    /// Describes the computation performed (e.g. "aggregate by customer, compute approval rate").
+    /// Tool names and step-type phrases are stripped before use.
+    /// </summary>
+    public string Approach { get; set; } = "";
+
     /// <summary>Output layout declared in the plan (Text, BarChart+Table, etc.).</summary>
     public string Layout { get; set; } = "";
 

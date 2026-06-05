@@ -7,6 +7,7 @@ capabilities:
   - sales-quotes
   - sales-get-quote
 understanding: "Identify which products appear most frequently in sales quotes, ranked by quote count for the current month, year, and quarter"
+description: "Fetch all sales quotes for current FY (default date range), then extract line items, group by product, count occurrences per product, sort descending, cap at 12 for chart; render as BarChart+Table showing product ranking with supporting detail"
 expectedData:
   summary:
     - TotalProducts

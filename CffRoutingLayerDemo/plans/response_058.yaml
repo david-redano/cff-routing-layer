@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customers have a higher percentage of their quotes approved (converted/closed) versus total quotes"
+description: "Fetch all sales quotes with default 1-year date range, group by customer , calculate approval rate (Closed ÷ Total) per customer, sort descending, render as BarChart+Table to compare customers by approval rate with supporting detail"
 expectedData:
   summary:
     - TotalCustomers

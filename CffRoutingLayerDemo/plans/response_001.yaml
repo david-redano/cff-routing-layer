@@ -7,6 +7,7 @@ capabilities:
   - sales-customers
   - sales-quotes
 understanding: "Calculate the percentage of customers for whom at least one sales quote has been created"
+description: "Fetch all customers (broadest scope, no filter), fetch all sales quotes (broadest scope, current FY default date range), then : count unique customers with quotes, divide by total customers, multiply by 100 to get percentage. Return as Text Summary with the derived metric"
 expectedData:
   summary:
     - TotalCustomers

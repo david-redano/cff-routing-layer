@@ -8,6 +8,7 @@ capabilities:
   - accounting-get-income-statement-es
   - accounting-get-trial-balance
 understanding: "Provide a high-level 3-point summary of the company's current financial health"
+description: "Fetch balance sheet (assets, liabilities, equity), income statement (profit/loss, revenue), and trial balance (payables/receivables) for today's date to assess solvency, profitability, and liquidity. Aggregate key metrics and return as Text Summary with three discrete financial health indicators"
 expectedData:
   summary:
     - HealthScore

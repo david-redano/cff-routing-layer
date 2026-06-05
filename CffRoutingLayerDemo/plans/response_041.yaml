@@ -6,6 +6,7 @@ displayName: Financial Agent
 capabilities:
   - purchasing-purchase-invoices
 understanding: "Calculate what percentage of unpaid invoices (pending to pay) are overdue"
+description: "Fetch all unpaid purchase invoices in current FY, then filter to identify overdue items (DueDate < TodaysDate), calculate the ratio of overdue count to total unpaid count, and return as Text Summary with the percentage"
 expectedData:
   summary:
     - OverduePercentage

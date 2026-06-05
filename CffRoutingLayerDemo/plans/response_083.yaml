@@ -7,6 +7,7 @@ capabilities:
   - sales-customers
   - sales-quotes
 understanding: "Identify which customers in the customer base have never received a sales quote"
+description: "Fetch all active customers , fetch all sales quotes with a broad date range, then identify customers who appear in the customer list but NOT in the quotes list by comparing customer IDs; return as Table for easy review"
 expectedData:
   summary:
     - TotalCustomers

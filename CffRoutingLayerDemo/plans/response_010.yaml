@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Identify which customer has the highest average order value"
+description: "Fetch all sales orders with ${period} date range, group by customer , calculate average order value per customer, sort descending, return top customer as Text summary with supporting detail"
 expectedData:
   summary:
     - TopCustomer

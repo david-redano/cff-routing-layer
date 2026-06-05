@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Identify the top customers ranked by their payment punctuality — those who consistently pay invoices by the due date"
+description: "Fetch all sales invoices with a broad date range (${period}), then filter to paid invoices, calculate days-to-pay for each (payment_date minus due_date), identify customers with zero or negative days-to-pay (on-time or early), rank by payment consistency (count of on-time payments), and return as BarChart+Table showing top customers by on-time payment count with supporting detail"
 expectedData:
   summary:
     - TotalCustomers

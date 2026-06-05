@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Rank sales quotes grouped by customer, showing which customers have the most quotes"
+description: "Fetch all sales quotes with default 1-year date range, group by customer , count quotes per customer, sort descending by count, cap chart at 12 customers, render as BarChart+Table for visual ranking with detail"
 expectedData:
   summary:
     - TotalCustomers

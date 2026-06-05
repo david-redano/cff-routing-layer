@@ -6,6 +6,7 @@ displayName: Accounting Agent
 capabilities:
   - accounting-get-trial-balance
 understanding: "Identify which ledger account in the trial balance had the largest change in balance"
+description: "Fetch trial balance for ${period} , compute absolute movement (debit_balance + credit_balance change) for each account , rank by movement descending, return the top account as Text with account name, code, and movement amount"
 expectedData:
   summary:
     - TopAccountCode
@@ -33,7 +34,7 @@ steps:
         value: "2026-06-01"
     nextStep: 2
   - id: 2
-    action: get-account-with-largest-movement
+    action: compute-identify-account-with-largest-movement
     stepType: Code
     functionName: buildOutput
     stepReason: "Identify account with largest movement"

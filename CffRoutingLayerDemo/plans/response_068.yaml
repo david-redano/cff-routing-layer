@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which sales quote has the lowest total amount"
+description: "Fetch all sales quotes using default 1-year date range per Specialized Rule, sort by total_amount ascending , return the single lowest-amount quote as Text Summary with quote reference and amount"
 expectedData:
   summary:
     - QuoteReference

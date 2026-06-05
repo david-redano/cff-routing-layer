@@ -112,6 +112,10 @@ public sealed class LlmPlanJudge : IPlanRanker
         foreach (var (c, i) in candidates.Select((c, i) => (c, i + 1)))
         {
             sb.AppendLine($"### Plan {i}: {c.Plan.PlanId}");
+            if (!string.IsNullOrWhiteSpace(c.Plan.Understanding))
+                sb.AppendLine($"What it does: {c.Plan.Understanding}");
+            if (!string.IsNullOrWhiteSpace(c.Plan.Description))
+                sb.AppendLine($"How: {c.Plan.Description}");
             sb.AppendLine($"Steps: {string.Join(" → ", c.Plan.Steps.Select(s => string.IsNullOrEmpty(s.ToolName) ? s.Action : s.ToolName))}");
             sb.AppendLine($"Required inputs: {string.Join(", ", c.Plan.RequiredInputSlots)}");
             sb.AppendLine($"Produces: {string.Join(", ", c.Plan.ProducedOutputFields)}");

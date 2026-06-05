@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Identify the top 10 customers ranked by percentage of invoices paid on time (on-time payment rate)"
+description: "Fetch all sales invoices across ${period}, compute on-time payment rate per customer (invoices paid on/before due_date ÷ total invoices per customer), rank descending, cap at top 10, render as BarChart+Table for visual comparison with detail breakdown"
 expectedData:
   summary:
     - TopCustomerCount

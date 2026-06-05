@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "List all sales orders that are currently in Pending state"
+description: "Fetch sales orders filtered by status='Pending' with a broad date range (${period}), then return as a Table with order details for user review"
 expectedData:
   summary:
     - OrderCount

@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Find sales orders with total amounts exceeding ${amount}"
+description: "Fetch all sales orders with default financial-year date range, filter by amount > 1000 , return as Table with order details and amounts for user review"
 expectedData:
   summary:
     - OrderCount

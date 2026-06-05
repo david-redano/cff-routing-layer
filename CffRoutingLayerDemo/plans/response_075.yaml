@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Determine whether any customers have sales quotes with a status of Closed only (no other statuses)"
+description: "Fetch all sales quotes with default financial-year date range, group by customer , check each customer's quote statuses, identify customers whose quotes are exclusively Closed, return yes/no validation result with customer list in Text Summary"
 expectedData:
   summary:
     - HasClosedOnlyCustomers

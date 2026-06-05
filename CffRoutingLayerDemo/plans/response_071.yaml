@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Determine whether there are any days with no sales quote activity"
+description: "Fetch all sales quotes using a broad date range (${period}), then identify the date range spanned by quotes, detect gaps (days with zero quotes), and return a yes/no validation result with supporting detail in Summary"
 expectedData:
   summary:
     - HasGaps

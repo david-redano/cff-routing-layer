@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Calculate the average number of days between invoice issue date and payment date across all customers and all time periods"
+description: "Fetch all paid sales invoices with broadest date range (financial year default), extract issue date and paid date from each invoice, calculate days-to-collection per invoice , compute average, and return as Text Summary"
 expectedData:
   summary:
     - AverageCollectionDays

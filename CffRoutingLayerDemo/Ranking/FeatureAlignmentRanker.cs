@@ -89,11 +89,23 @@ public sealed class FeatureAlignmentRanker : IPlanRanker
     private static float ComputeOutputRelevance(CandidateResult candidate, QueryIntent intent)
     {
         if (candidate.Plan.Features is null) return 0.5f;
-        // Check if query keywords appear in expected output fields
-        var outputText = string.Join(" ", candidate.Plan.Features.OutputFieldNames).ToLowerInvariant();
+        // Expand camelCase field names into constituent words before matching.
+        // e.g. "TopCustomerBalance" → {"top", "customer", "balance"}
+        // This prevents "customer" matching inside "topcustomer" or "totalcustomers".
+        var outputWords = candidate.Plan.Features.OutputFieldNames
+            .SelectMany(SplitCamelCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var queryTokens = intent.NormalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var matches = queryTokens.Count(t => t.Length > 3 && outputText.Contains(t));
+        var matches = queryTokens.Count(t => t.Length > 3 && outputWords.Contains(t));
         return Math.Min(1f, matches * 0.2f);
+    }
+
+    /// <summary>Splits a camelCase or PascalCase identifier into lowercase words.</summary>
+    private static IEnumerable<string> SplitCamelCase(string input)
+    {
+        var words = System.Text.RegularExpressions.Regex.Split(
+            input, @"(?<=[a-z])(?=[A-Z])");
+        return words.Select(w => w.ToLowerInvariant()).Where(w => w.Length > 0);
     }
 
     /// <summary>
@@ -110,7 +122,7 @@ public sealed class FeatureAlignmentRanker : IPlanRanker
         if (plan.SampleQueries.Count == 0)
         {
             // Fall back to corpus overlap when no sample queries are available.
-            var corpus = plan.Understanding?.ToLowerInvariant() ?? "";
+            var corpus = ((plan.Understanding ?? "") + " " + (plan.Description ?? "")).ToLowerInvariant().Trim();
             if (string.IsNullOrWhiteSpace(corpus)) return 0.5f;
             var queryTokens = intent.NormalizedQuery
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -123,9 +135,40 @@ public sealed class FeatureAlignmentRanker : IPlanRanker
 
         // Best sample-query similarity (normalized edit distance).
         var normalized = intent.NormalizedQuery;
-        return plan.SampleQueries
+        var editSim = plan.SampleQueries
             .Max(sq => NormalizedEditSimilarity(normalized, sq.Trim().ToLowerInvariant()));
+
+        // Keyword coherence guard: if the query's content words are mostly absent from the
+        // plan's understanding + description + sample text, this plan is about a different
+        // subject even if the surface phrasing looks similar (e.g. both mention "customer").
+        // Cap the edit-similarity contribution proportionally to keyword overlap.
+        var planText = ((plan.Understanding ?? "") + " " + (plan.Description ?? "") + " " +
+                        string.Join(" ", plan.SampleQueries)).ToLowerInvariant();
+        var contentWords = normalized
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(t => t.Length > 4 && !IsStopWord(t))
+            .ToList();
+        if (contentWords.Count > 0)
+        {
+            float keywordCoverage = (float)contentWords.Count(w => planText.Contains(w)) / contentWords.Count;
+            // Scale: full coverage → no change; zero coverage → reduce to 25 % of edit score.
+            editSim *= 0.25f + 0.75f * keywordCoverage;
+        }
+
+        return editSim;
     }
+
+    private static readonly HashSet<string> StopWords = new(
+        new[]
+        {
+            "which", "where", "about", "would", "could", "should", "their", "there",
+            "these", "those", "shall", "might", "shows", "lists", "gives", "tell",
+            "show", "list", "give", "what", "that", "this", "from", "have",
+            "been", "were", "with", "more", "most", "some", "than", "then", "when",
+        },
+        StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsStopWord(string word) => StopWords.Contains(word);
 
     /// <summary>
     /// Normalized edit similarity: 1 - (Levenshtein / max(|a|, |b|)).

@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-customers
 understanding: "User wants to know the total count of customers"
+description: "Fetch all customers with no filters to retrieve the complete customer base, then extract the total_items count from pagination metadata , and return as Text Summary"
 expectedData:
   summary:
     - CustomerCount

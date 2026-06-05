@@ -6,6 +6,7 @@ displayName: Accounting Agent
 capabilities:
   - accounting-get-income-statement-es
 understanding: "Calculate total tax paid by the business from the start of the ${period} to today"
+description: "Fetch the Income Statement for the ${period} , extract the field, apply Math.abs to convert the negative accounting convention value to a positive display amount, and return as Text Summary"
 expectedData:
   summary:
     - TaxPaid

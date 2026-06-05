@@ -7,6 +7,7 @@ capabilities:
   - sales-orders
   - sales-customers
 understanding: "Identify which customers have not placed any sales orders within the ${period}"
+description: "Fetch all sales orders from the ${period} , extract unique customer IDs, then fetch the complete customer list , and use a Code step to identify customers NOT in the recent orders set; return as Table for easy review"
 expectedData:
   summary:
     - TotalActiveCustomers

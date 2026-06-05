@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the smallest sales quote by total amount"
+description: "Fetch all sales quotes with default financial-year date range, find the minimum total_amount , and return the customer name and quote details as Text summary"
 expectedData:
   summary:
     - CustomerName

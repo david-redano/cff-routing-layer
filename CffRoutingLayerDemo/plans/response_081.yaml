@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes for each customer"
+description: "Fetch all sales quotes with default 1-year date range, group by customer , count quotes per customer, sort descending, cap at 12 for chart; render as BarChart+Table for comparison with detail"
 expectedData:
   summary:
     - TotalCustomers

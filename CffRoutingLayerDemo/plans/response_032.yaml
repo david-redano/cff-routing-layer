@@ -7,6 +7,7 @@ capabilities:
   - sales-invoices
   - sales-get-invoice
 understanding: "Calculate the average number of days from invoice issue date to payment date across all customers over the ${period}"
+description: "Fetch all paid sales invoices from the ${period} (${date} to ${date}) with status=Collected, extract payment dates from the payments array in each invoice detail, calculate days-to-collect per invoice (payment_date - issue_date), compute the average across all invoices, and return as Text Summary with the metric and supporting context"
 expectedData:
   summary:
     - AverageDaysToCollect

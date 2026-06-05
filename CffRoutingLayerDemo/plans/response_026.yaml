@@ -8,6 +8,7 @@ capabilities:
   - sales-orders
   - sales-get-order
 understanding: "Retrieve details for sales order ${orderId} for customer ${customer} with order date ${date}"
+description: "Search for customer ${customer} to obtain the customer ID, then fetch sales orders for that customer filtered to the date range around ${date}, identify order ${orderId} , and retrieve full details . Return order details as Text summary with key fields"
 expectedData:
   summary:
     - OrderReference

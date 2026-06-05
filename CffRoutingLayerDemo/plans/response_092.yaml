@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Count the total number of sales quotes with a Declined status"
+description: "Fetch all sales quotes with status filter set to 'Declined' and a broad date range (${period}), then count the results ; return as Text Summary with the count"
 expectedData:
   summary:
     - RejectedQuoteCount

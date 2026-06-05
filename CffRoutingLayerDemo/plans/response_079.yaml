@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Calculate the average invoice amount per customer across all invoices"
+description: "Fetch all sales invoices using ${period} default (${date} to ${date}), group by customer , calculate average total_amount per customer, return Text summary with key metrics"
 expectedData:
   summary:
     - AverageAmountPerCustomer

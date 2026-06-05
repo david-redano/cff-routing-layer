@@ -7,6 +7,7 @@ capabilities:
   - sales-customers
   - sales-orders
 understanding: "Retrieve complete details for sales order ${orderId} for customer ${customer}"
+description: "Search for customer 'Johnson & Associates' to obtain CustomerId, validate single match , then fetch sales order ${orderId} using the order reference; return Table layout with order details and line items"
 expectedData:
   summary:
     - OrderReference

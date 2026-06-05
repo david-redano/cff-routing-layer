@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Compare the total amount of sales quotes issued in the current period to the same period ${period}"
+description: "Fetch quotes for current ${period} (${date} to ${date}) and prior-year equivalent (${date} to ${date}) via two calls, sum total_amount per period , calculate year-over-year comparison, and return as Text summary with comparison metrics"
 expectedData:
   summary:
     - CurrentPeriodAmount

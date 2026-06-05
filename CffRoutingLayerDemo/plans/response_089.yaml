@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Check whether any sales quotes were created on ${date}"
+description: "Fetch sales quotes for the specific date ${date} , then validate whether any results exist; return a yes/no answer in Summary"
 expectedData:
   summary:
     - QuoteExists

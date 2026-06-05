@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which sales quote has the highest total monetary amount"
+description: "Fetch all sales quotes using default 1-year rolling window per Specialized Rule, find the maximum total_amount , return Text summary with quote details"
 expectedData:
   summary:
     - QuoteReference

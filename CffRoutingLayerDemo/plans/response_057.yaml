@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Count the number of sales quotes created ${period} ${year}"
+description: "Fetch all sales quotes with date_from set to ${date} and date_to set to ${date} to capture the entire month of March, then count the results and return as Text Summary"
 expectedData:
   summary:
     - QuoteCount

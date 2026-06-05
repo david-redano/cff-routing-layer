@@ -7,6 +7,7 @@ capabilities:
   - sales-orders
   - sales-get-order
 understanding: "Retrieve complete details for sales order ${orderId}"
+description: "Search for the sales order by ref ${refId} to obtain its ID, then fetch full details , and return as Table layout with order summary and line items"
 expectedData:
   summary:
     - OrderReference

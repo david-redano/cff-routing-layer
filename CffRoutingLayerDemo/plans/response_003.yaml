@@ -6,6 +6,7 @@ displayName: Analysis Agent
 capabilities:
   - analysis-aggregation
 understanding: "Identify customers who have high invoice/order amounts but have received very few quotes"
+description: "Fetch all customers with their aggregated metrics (total sales amount, quote count) grouped by customer, then filter for high-amount customers with low quote counts, rank by amount descending, cap at 12 for chart display; render as BarChart+Table to show the comparison visually with supporting detail"
 expectedData:
   summary:
     - HighAmountLowQuoteCount

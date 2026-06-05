@@ -6,6 +6,7 @@ displayName: Analysis Agent
 capabilities:
   - analysis-aggregation
 understanding: "Calculate the percentage of customers who received a quote ${period} and then accepted another quote in the same quarter"
+description: "Fetch all sales quotes from ${period} grouped by customer to identify unique customers and their quote counts/statuses, then calculate repeat acceptance rate (customers with 2+ accepted quotes ÷ total unique customers), return as Text Summary with supporting metrics"
 expectedData:
   summary:
     - RepeatAcceptancePercentage

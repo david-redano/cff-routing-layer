@@ -6,6 +6,7 @@ displayName: Accounting Agent
 capabilities:
   - accounting-get-income-statement-es
 understanding: "Show total spending across all expense categories"
+description: "Fetch income statement to retrieve operating_expenses section (which contains all expense categories with negative values), extract and sum absolute values of all expense line items , group by category, return as BarChart+Table for visual comparison and detail breakdown"
 expectedData:
   summary:
     - TotalSpent

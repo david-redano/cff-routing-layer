@@ -8,6 +8,7 @@ capabilities:
   - sales-orders
   - sales-get-order
 understanding: "Retrieve complete details for sales order ${orderId} belonging to ${customer}, issued on ${date}"
+description: "Search for ${customer} to obtain CustomerId, then fetch sales orders for that customer filtered to January ${year}, locate order ${orderId} , validate single match, and retrieve full details . Return Table layout with order line items and summary metrics"
 expectedData:
   summary:
     - OrderNumber

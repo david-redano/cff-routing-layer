@@ -6,6 +6,7 @@ displayName: Accounting Agent
 capabilities:
   - accounting-get-trial-balance
 understanding: "Check whether there are any account balances in suspense or uncategorized accounts"
+description: "Fetch the Trial Balance for the ${period} to inspect all ledger accounts. , filter for accounts whose name or code contains 'suspense' or 'uncategorized' (case-insensitive), check for non-zero balances, and return a Text summary indicating whether such accounts exist and their total balance"
 expectedData:
   summary:
     - SuspenseAccountsFound

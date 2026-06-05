@@ -7,6 +7,7 @@ capabilities:
   - sales-invoices
   - sales-customers
 understanding: "Calculate average sales invoice amount grouped by customer type (inferred from the customer 'type' field: business = B2B, individual = B2C)"
+description: "Fetch all sales invoices in ${period}, then fetch customer master data to obtain type classifications. , join invoices to customers by ID, group by inferred B2B/B2C type, calculate average total_amount per group, and return as BarChart+Table for comparison with supporting detail"
 expectedData:
   summary:
     - B2BAverage

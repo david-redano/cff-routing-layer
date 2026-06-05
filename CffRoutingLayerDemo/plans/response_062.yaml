@@ -5,7 +5,8 @@ domain: finance
 displayName: Financial Agent
 capabilities:
   - purchasing-purchase-invoices
-understanding: "Calculate the average number of days it takes to pay supplier invoices, measured from invoice issue date to actual payment date — this is a payment speed / Days Payable Outstanding metric, NOT a total amount or paid-invoice sum"
+understanding: "Calculate the average number of days between invoice issue date and payment date for supplier invoices"
+description: "Fetch all purchase invoices with a broad date range (${period}), then calculate days-to-pay for each paid invoice (paid_date minus date), compute the average, and return as Text Summary"
 expectedData:
   summary:
     - AverageDaysToPay
@@ -21,10 +22,6 @@ defaultEntities:
 sampleQueries:
   - "Calculate the average number of days between invoice issue date and payment date for supplier invoices"
   - "Average number of days between invoice issue date and payment date for supplier?"
-  - "How many days on average does it take us to pay supplier invoices?"
-  - "What is our average payment speed for purchase invoices?"
-  - "Calculate days payable outstanding for this quarter"
-  - "How fast are we paying our suppliers on average?"
 steps:
   - id: 1
     action: purchasing-list-purchase-invoices

@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has received the highest number of sales quotes"
+description: "Fetch all sales quotes using default financial-year date range, group by customer , count quotes per customer, sort descending, return top customer as Text summary with supporting detail in a BarChart+Table layout showing customer comparison"
 expectedData:
   summary:
     - TopCustomer

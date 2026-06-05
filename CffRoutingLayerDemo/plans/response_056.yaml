@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "User wants to know the total count of invoices in the system"
+description: "Fetch all sales invoices using a broad date range (${period}), then count the total items from pagination metadata; return as Text Summary with invoice count"
 expectedData:
   summary:
     - TotalInvoices

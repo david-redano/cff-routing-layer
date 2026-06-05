@@ -33,6 +33,15 @@ public sealed class PlanDefinition
     /// Maps to &lt;Reasoning&gt; → Understanding.</summary>
     public string Understanding { get; set; } = "";
 
+    /// <summary>
+    /// Conceptual description of HOW the plan achieves its goal, derived from the
+    /// Reasoning → Approach field with tool names and step-type phrases stripped.
+    /// Included in the embedding text to add discriminating computation vocabulary
+    /// (e.g. "aggregate by customer", "compute approval rate") not always present
+    /// in the Understanding field.
+    /// </summary>
+    public string Description { get; set; } = "";
+
     /// <summary>Describes the output data shape of the plan.
     /// Maps to &lt;Reasoning&gt; → ExpectedData.</summary>
     public ExpectedDataDefinition ExpectedData { get; set; } = new();

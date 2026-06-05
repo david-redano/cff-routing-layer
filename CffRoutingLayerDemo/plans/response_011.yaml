@@ -6,6 +6,7 @@ displayName: Analysis Agent
 capabilities:
   - analysis-aggregation
 understanding: "Identify which customers have ordered ${itemDescription} most frequently"
+description: "Use to fetch sales orders grouped by customer, filtered to iPhone items, with count aggregation and ordering by metric descending. Return BarChart+Table showing top customers by order frequency with supporting detail"
 expectedData:
   summary:
     - TotalCustomers

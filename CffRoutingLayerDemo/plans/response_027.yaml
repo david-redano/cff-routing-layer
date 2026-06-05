@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Calculate what percentage of total sales invoices were paid after their due date"
+description: "Fetch all sales invoices with broadest date range (current FY), then identify paid invoices where paid_date > due_date, calculate the ratio (late-paid count ÷ total paid invoices), and return as Text Summary with the percentage metric"
 expectedData:
   summary:
     - LatePaymentPercentage

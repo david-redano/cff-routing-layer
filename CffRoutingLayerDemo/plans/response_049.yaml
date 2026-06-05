@@ -6,6 +6,7 @@ displayName: Accounting Agent
 capabilities:
   - accounting-get-balance-sheet
 understanding: "Calculate the percentage breakdown of short-term debt versus long-term debt"
+description: "Fetch the Balance Sheet for the ${period} end date, extract current_liabilities (short-term) and (long-term) from the report, calculate totals and percentages , and return as Text Summary with the debt composition"
 expectedData:
   summary:
     - ShortTermDebtPercentage

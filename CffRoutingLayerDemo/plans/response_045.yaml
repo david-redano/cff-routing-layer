@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Show the total amount of sales invoices issued ${period} that have already been collected (paid)"
+description: "Fetch all sales invoices issued in the prior calendar month (May ${year}, since TodaysDate = ${date}) with status 'paid' , sum the total_amount , and return as Text Summary with the aggregated metric"
 expectedData:
   summary:
     - TotalCollected

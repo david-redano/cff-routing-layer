@@ -7,6 +7,7 @@ capabilities:
   - accounting-get-trial-balance
   - accounting-get-balance-sheet
 understanding: "Determine whether the trial balance and balance sheet are in agreement — specifically, whether debits equal credits on the trial balance and whether the balance sheet totals reconcile to those balances"
+description: "Fetch trial balance and balance sheet for the same period and , then validate: (1) trial balance debits = credits, (2) balance sheet assets = liabilities + equity, (3) trial balance ledger account balances reconcile to balance sheet line items. Return Text summary with validation results and any discrepancies found"
 expectedData:
   summary:
     - TrialBalanceInBalance

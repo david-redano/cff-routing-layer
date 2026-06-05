@@ -6,6 +6,7 @@ displayName: Financial Agent
 capabilities:
   - purchasing-purchase-invoices
 understanding: "Calculate what percentage of total purchase invoices are being paid late"
+description: "Fetch all purchase invoices with a broad date range (current FY), then identify overdue invoices (due_date < TodaysDate and status unpaid), calculate the ratio of overdue count to total count, and return as Text Summary with the percentage metric"
 expectedData:
   summary:
     - LatePaymentPercentage

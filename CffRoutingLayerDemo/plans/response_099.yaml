@@ -6,6 +6,7 @@ displayName: Analysis Agent
 capabilities:
   - analysis-aggregation
 understanding: "Identify which products or services appear most frequently in sales quotes during the current period"
+description: "Fetch all sales quotes for the ${period} , retrieve full details for each quote to access line items in a loop-free aggregation step, then group by product/service name , count occurrences, sort descending, cap at 12 entries for BarChart; render as BarChart+Table to show ranking with supporting detail"
 expectedData:
   summary:
     - TotalProducts

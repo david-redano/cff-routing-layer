@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-invoices
 understanding: "Calculate the ratio of Pending to Closed sales invoices"
+description: "Fetch all sales invoices with broad date range (${period}), filter by status to separate Pending and Closed counts, calculate ratio, return as Text Summary"
 expectedData:
   summary:
     - PendingCount

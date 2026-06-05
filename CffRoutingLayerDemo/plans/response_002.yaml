@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Identify which customer has the lowest total quoted amount across all sales quotes"
+description: "Fetch all sales quotes using default 1-year rolling window per Specialized Rule, group by customer , sum total_amount per customer, sort ascending to find minimum spender, cap at 12 for chart display; render as BarChart+Table for comparison with detail"
 expectedData:
   summary:
     - TotalCustomers

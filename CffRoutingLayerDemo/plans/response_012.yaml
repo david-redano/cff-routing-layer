@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-orders
 understanding: "Identify which customers have sales orders with pending status"
+description: "Fetch all sales orders with 'draft' status using broadest date range (${period}), then extract unique customers and their order details ; render as Table for listing customer-order pairs"
 expectedData:
   summary:
     - CustomerCount

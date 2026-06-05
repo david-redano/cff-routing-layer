@@ -6,6 +6,7 @@ displayName: Sales Agent
 capabilities:
   - sales-quotes
 understanding: "Check whether any sales quotes exist that have no monetary amount (null or zero total_amount)"
+description: "Fetch all sales quotes with default financial-year date range, then validate whether any quote has a missing or zero total_amount; return a yes/no answer in Text Summary"
 expectedData:
   summary:
     - HasMissingAmounts
