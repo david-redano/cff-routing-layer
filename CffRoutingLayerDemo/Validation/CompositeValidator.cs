@@ -13,7 +13,7 @@ public sealed class CompositeValidator : IPlanValidator
     private readonly IReadOnlyList<IPlanValidator> _validators;
 
     public CompositeValidator()
-        : this(new SlotCoverageValidator(), new SchemaCompatibilityValidator()) { }
+        : this(new SlotCoverageValidator(), new SchemaCompatibilityValidator(), new SemanticCoherenceValidator()) { }
 
     public CompositeValidator(params IPlanValidator[] validators)
     {

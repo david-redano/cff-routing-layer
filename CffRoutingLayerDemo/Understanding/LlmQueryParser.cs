@@ -255,6 +255,11 @@ public sealed class LlmQueryParser : IQueryParser
                 // Drop slots whose value is still empty after normalisation.
                 if (string.IsNullOrWhiteSpace(slotValue)) continue;
 
+                // Guard: reject descriptive/comparative phrases that the LLM should never
+                // have extracted as entity slot values (e.g. "more balance", "largest invoice").
+                // Only proper nouns and identifiers are valid; descriptive qualifiers belong in constraints.
+                if (IsDescriptivePhrase(slotValue)) continue;
+
                 slots.Add(new QuerySlot
                 {
                     Name       = slotName,
@@ -400,6 +405,43 @@ public sealed class LlmQueryParser : IQueryParser
             @"[$€£¥]?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:[$€£¥]|k\b)?",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         return m.Success ? m.Groups[1].Value : "";
+    }
+
+    /// <summary>
+    /// Returns true when a slot value is a descriptive or comparative phrase rather than a proper
+    /// noun or identifier. These should never be extracted as entity slot values; they belong in
+    /// <c>constraints</c>. This is a deterministic post-parse guard against LLM prompt non-compliance.
+    ///
+    /// Heuristics (any one is sufficient to reject):
+    ///   • Contains a comparative/superlative/quantity adjective (more, most, highest, largest, …)
+    ///   • Contains a common function word that indicates a filter predicate (with, that, having, …)
+    ///   • Contains two or more whitespace-separated tokens where none looks like a proper noun
+    ///     (i.e. all tokens are lowercase common words)
+    /// </summary>
+    private static bool IsDescriptivePhrase(string value)
+    {
+        var lower = value.Trim().ToLowerInvariant();
+
+        // Single-word values are almost always fine (proper noun or ID).
+        var tokens = lower.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 1) return false;
+
+        // Comparative / superlative / quantity triggers
+        string[] descriptiveTriggers =
+        [
+            "more", "most", "less", "least", "highest", "lowest", "largest", "smallest",
+            "biggest", "best", "worst", "top", "bottom", "greater", "lower", "higher",
+            "maximum", "minimum", "total", "average", "latest", "oldest", "newest",
+            "recent", "oldest", "pending", "unpaid", "overdue"
+        ];
+
+        // Filter / predicate function words
+        string[] filterWords = [ "with", "that", "having", "which", "where", "who", "whose" ];
+
+        if (tokens.Any(t => descriptiveTriggers.Contains(t))) return true;
+        if (tokens.Any(t => filterWords.Contains(t))) return true;
+
+        return false;
     }
 }
 

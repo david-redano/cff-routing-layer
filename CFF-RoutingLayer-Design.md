@@ -156,631 +156,279 @@ New Request Embedding
 
 ---
 
-## 2. CFF Demo — Architecture Design (.NET 8 Console App)
+## 2. CFF Demo — Implemented Architecture (.NET 9 Console App)
 
 ### 2.1 Goals
-- Demonstrate the routing layer concept locally with zero cloud dependency.
-- Simulate semantic intent caching with in-memory cosine similarity.
-- Show deterministic execution plans with step-by-step output.
-- Include realistic accounting demo scenarios.
+- Demonstrate the Intuit GenOS routing concept locally with a real LLM (Amazon Bedrock).
+- Implement hybrid semantic + metadata retrieval over a library of 114+ execution plans.
+- Route free-text user queries to the best-matching YAML plan in ≤ 2 s end-to-end.
+- Show deterministic execution plans with step-by-step console output.
+- Include realistic CFF accounting scenarios sourced from real plan API responses.
 
 ### 2.2 Project Structure
-
-> **YAML-first design**: all execution plans, benchmark definitions, and test cases live in declarative YAML files. C# code only contains runtime logic — no hardcoded plan steps, query strings, or test inputs.
 
 ```
 CffRoutingLayerDemo/
 ├── CffRoutingLayerDemo.csproj
-├── Program.cs                         # Entry point — REPL loop
+├── Program.cs                              # Interactive REPL loop
 │
 ├── Core/
-│   ├── RoutingEngine.cs               # Orchestrates all pipeline stages
-│   ├── IntentResult.cs                # Intent data model
-│   ├── ExecutionPlan.cs               # Plan + Step data models
-│   └── RoutingContext.cs              # Per-request context carrier
+│   └── PlanRoutingPipeline.cs              # Orchestrates Phases 0–3
 │
-├── Cache/
-│   ├── ISemanticCache.cs              # Cache interface
-│   ├── InMemorySemanticCache.cs       # In-process vector cache
-│   └── EmbeddingSimulator.cs          # Simulated embeddings (no API needed)
+├── Understanding/
+│   ├── LlmQueryParser.cs                   # Phase 0: Bedrock Claude Haiku → QueryIntent
+│   ├── RuleBasedQueryParser.cs             # Phase 0 fallback (deterministic, no LLM)
+│   ├── QueryNormalizer.cs                  # Temporal-only token normalization
+│   ├── ActionClassifier.cs                 # Verb → DomainAction enum
+│   ├── DomainDictionary.cs                 # Keyword → domain/subdomain
+│   ├── EntityExtractor.cs                  # Slot extraction
+│   └── TemporalResolver.cs                 # Relative date → TemporalScope
 │
-├── Classification/
-│   ├── IIntentClassifier.cs
-│   └── RuleBasedClassifier.cs         # Keyword/pattern classifier (demo-safe)
+├── Retrieval/
+│   ├── HybridPlanRetriever.cs              # Phase 1: embedding (55%) + metadata (45%)
+│   └── PlanEmbeddingIndex.cs              # Pre-built Titan V2 embeddings for all plans
 │
-├── Normalization/
-│   ├── IntentRewriter.cs              # PII extraction + surface normalisation
-│   └── RewrittenIntent.cs             # Output record (NormalizedText + entities)
+├── Index/
+│   ├── PlanIndex.cs                        # Structural multi-dimensional index (fallback)
+│   ├── PlanFeatureExtractor.cs             # Extracts PlanFeatureVector at load time
+│   └── Filters/                            # DomainFilter, ActionFilter, TemporalFilter
 │
-├── Registry/
-│   ├── AgentRegistry.cs               # Maps intents → agent metadata
-│   └── AgentManifest.cs               # Agent capability contract
+├── Ranking/
+│   ├── LlmPlanJudge.cs                     # Phase 2: Bedrock Claude re-ranker (primary)
+│   ├── FeatureAlignmentRanker.cs           # Phase 2: deterministic fallback scorer
+│   └── ScoringWeights.cs                   # Tunable weights
 │
-├── Agents/
-│   ├── IAgent.cs
-│   ├── BookkeepingAgent.cs            # Loads plan from plans/cash-flow-report.yaml
-│   ├── TaxAgent.cs                    # Loads plan from plans/tax-liability.yaml
-│   ├── InvoiceAgent.cs                # Loads plan from plans/create-invoice.yaml
-│   ├── ReconciliationAgent.cs         # Loads plan from plans/reconcile-account.yaml
-│   └── ReportingAgent.cs              # Loads plan from plans/profit-loss.yaml
+├── Validation/
+│   ├── CompositeValidator.cs               # Runs all validators; up to 3 fallback attempts
+│   ├── SlotCoverageValidator.cs            # Required slot keys must be bound or defaulted
+│   ├── SchemaCompatibilityValidator.cs     # Output field compatibility check
+│   └── SemanticCoherenceValidator.cs       # Warns when plan subject absent from query
 │
 ├── Plans/
-│   ├── PlanLoader.cs                  # Deserialises YAML → ExecutionPlan
-│   ├── PlanExecutor.cs                # Executes steps sequentially
-│   └── PlanStepResult.cs
+│   ├── PlanDefinition.cs                   # YAML plan model (including Description field)
+│   ├── PlanLoader.cs                       # Deserialises YAML → PlanDefinition
+│   └── PlanExecutor.cs                     # Runs plan steps against CompanyDataStore
 │
-├── Demo/
-│   ├── DemoScenarios.cs               # Pre-built accounting scenarios
-│   └── ConsoleRenderer.cs             # Pretty console output
+├── Bedrock/
+│   ├── BedrockLlmHelper.cs                 # Shared Converse API wrapper
+│   └── BedrockStreamingConversation.cs     # Streaming fallback for Rejected queries
 │
-├── plans/                             ◄ YAML EXECUTION PLANS
-│   ├── cash-flow-report.yaml
-│   ├── create-invoice.yaml
-│   ├── reconcile-account.yaml
-│   ├── tax-liability.yaml
-│   ├── profit-loss.yaml
-│   ├── profit-audit.yaml              # GenRuntime-style anomaly detection
-│   ├── tax-optimization.yaml          # GenRuntime-style deduction finder
-│   └── cash-runway-forecast.yaml      # GenRuntime-style cash runway
+├── plans/                                  # 114+ YAML plan files
+│   ├── cashflow.yaml   profitloss.yaml  tax.yaml  invoice.yaml  reconcile.yaml  …
+│   └── response_001..109.yaml              # CFF real plans (real-001 … real-109)
 │
-├── tests/                             ◄ YAML TEST DEFINITIONS
-│   ├── classifier-tests.yaml          # Intent classification cases
-│   ├── cache-tests.yaml               # Semantic cache hit/miss cases
-│   ├── plan-tests.yaml                # Plan structure + execution cases
-│   └── integration-tests.yaml        # End-to-end routing cases
-│
-└── benchmarks/                        ◄ YAML BENCHMARK DEFINITIONS
-    ├── routing-benchmarks.yaml        # Pipeline latency targets + query set
-    └── plan-execution-benchmarks.yaml # Per-plan execution targets
+└── CompanyData/
+    └── CompanyDataStore.cs                 # In-memory demo financial data (DEMO-001)
 ```
 
-### 2.3A Intent Normalization Layer
+**Supporting projects:**
 
-#### Design: LLM-Based Rewriter with Conversation History
+```
+CffPlanTransformer/          # CLI tool: converts raw CFF API responses → YAML plans
+  └── Transformer/PlanTransformer.cs   # Strips Approach → description:; normalizes understanding:
 
-The rewriter is backed by a lightweight Bedrock call (Claude Haiku, `max_tokens=200`, `temperature=0`). This is deliberately cheap — a small structured prompt whose response is ~50 tokens of JSON. Using an LLM instead of regex gives three benefits that regex cannot match:
+CffRoutingLayerDemo.Tests/
+CffRoutingLayerDemo.Benchmarks/
 
-| Capability | Regex | LLM rewriter |
-|---|---|---|
-| Coreference resolution | ✗ | ✓ "same account" → `CHK-001` from history |
-| Novel surface forms | ✗ | ✓ "what's the runway look like" resolved without a regex rule |
-| Pronoun resolution | ✗ | ✓ "that customer" → resolved from prior turn |
-| PII extraction accuracy | ~80% | >95% |
-| Cost per call | $0 | ~$0.00003 (Claude Haiku 200 tokens) |
+cff-real-plans/              # Raw CFF plan API responses (source for transformer)
+cff-real-plans-yaml/         # Intermediate transformer output (pre-normalized)
+```
 
-A `RegexIntentRewriter` fallback (no I/O, < 1 ms) is retained for local demo runs where `USE_LLM_REWRITER=false`.
+---
 
-Both implement `IIntentRewriter`:
+### 2.3 Phase 0 — LLM Intent Extraction (LlmQueryParser)
+
+`LlmQueryParser` calls **Bedrock Claude 3 Haiku** with a structured system prompt and produces a `QueryIntent`:
+
 ```csharp
-public interface IIntentRewriter
-{
-    Task<RewrittenIntent> RewriteAsync(
-        string rawText,
-        ConversationHistory? history = null,
-        CancellationToken ct = default);
-}
+public sealed record QueryIntent(
+    string Domain,          // e.g. "finance"
+    string? SubDomain,
+    DomainAction Action,    // List / Compute / Create / etc.
+    double ActionConfidence,
+    Dictionary<string, SlotValue> Slots,   // extracted entities
+    TemporalScope? Temporal,
+    string Reasoning,
+    List<QueryIntent> SubIntents           // non-empty for compound queries
+);
 ```
 
-#### Why it belongs in the router
+Key design decisions in the LLM system prompt:
 
-The rewriter is **stage 2 in the pipeline, before the cache**. It runs in < 5 ms and makes every downstream stage faster and cheaper:
-
-| Stage | Without rewriter | With rewriter |
-|---|---|---|
-| Semantic cache | Miss on every name/amount variation | Hit on all variations of same intent |
-| Embedding model | Encodes raw PII (GDPR risk) | Encodes clean placeholder form |
-| Classifier | Noisy proper nouns distract matching | Stable canonical input |
-| Execution plan | Entities must be re-extracted later | Already extracted, passed through |
-
-#### Entity types extracted
-
-| Entity | Trigger pattern | Placeholder | Example |
-|---|---|---|---|
-| Customer / company | Title-case after `for`, `to`, `from`, `by` | `${customer}` | `"Acme Corp"` |
-| Account ID | `CHK-`, `SAV-`, `ACC-` + digits | `${accountId}` | `"CHK-001"` |
-| Monetary amount | `$` + digits with optional commas/cents | `${amount}` | `"$12,450.00"` |
-| Calendar period | month names, `this month`, `last N days`, `Q1–Q4 YYYY`, `YTD` | `${period}` | `"last 30 days"` |
-| Tax year | 4-digit year 2000–2099 | `${year}` | `"2024"` |
-| Legal entity type | `LLC`, `S-Corp`, `C-Corp`, `sole proprietor` | `${entityType}` | `"LLC"` |
-
-#### Surface normalisation rules
-
-| Raw | Normalised |
+| Decision | Rationale |
 |---|---|
-| `pnl`, `p&l`, `P&L`, `p and l` | `profit and loss` |
-| `ar`, `A/R`, `accounts receivable` | `accounts receivable` |
-| `ap`, `A/P`, `accounts payable` | `accounts payable` |
-| `reconcile`, `recon`, `reconciliation` | `reconcile` |
-| `invoice`, `bill`, `billing` | `invoice` |
+| JSON schema with `"query"` field required | For compound queries the root intent must describe the **first task only** (not the full original query) so each sub-intent gets its own isolated query text for Phase 1 retrieval |
+| Slot extraction rules — CRITICAL block | Forbids descriptive phrases as slot values: `"customer"` cannot be `"more balance"`, `"the one with the highest revenue"`, etc. |
+| Rich date context block injected every call | Today's date, current/last month/quarter/FY in ISO 8601 so LLM can resolve `"last month"`, `"FY2025"` without ambiguity |
+| LRU cache (capacity 500) | Avoids repeat LLM calls for semantically identical queries |
+| 800 ms timeout | Falls back to `RuleBasedQueryParser` on timeout or Bedrock error |
+
+#### IsDescriptivePhrase guard (post-parse)
+
+After parsing the LLM JSON response, `ParseIntentElement` applies a deterministic check on every extracted slot value:
+
+```csharp
+private static bool IsDescriptivePhrase(string value)
+```
+
+If the slot value contains comparative/superlative adjectives (`more`, `most`, `highest`, `lowest`, `largest`, `top`, `bottom`, `greater`, `maximum`, `minimum`, `average`, `latest`, `oldest`, `recent`, `pending`, `unpaid`, `overdue`, …) **or** filter-predicate connectors (`with`, `that`, `having`, `which`, `where`, `who`, `whose`), the slot is silently dropped.
+
+This catches cases where the LLM extracts a filter description as if it were a named entity (e.g., `customer = "more balance"` when the query says "the customer with more balance").
+
+#### Multi-intent splitting
+
+When the LLM detects a compound query (e.g., "show upcoming sales payments and list the customer with the highest balance"), it populates `SubIntents`. The root `query` field is set to the **first task only**; `SubIntents` carries the remaining tasks. `PlanRoutingPipeline` routes each sub-intent independently through Phases 1–3.
 
 ---
 
-#### `Normalization/RewrittenIntent.cs`
+### 2.4 Phase 1 — Hybrid Retrieval (HybridPlanRetriever + PlanEmbeddingIndex)
 
-```csharp
-// Normalization/RewrittenIntent.cs
-namespace CffRoutingLayerDemo.Normalization;
-
-/// <summary>
-/// Output of <see cref="IntentRewriter"/>. Carries the PII-free canonical
-/// text used for caching/classification, plus the extracted real values
-/// that are later injected into execution plan steps.
-/// </summary>
-public sealed record RewrittenIntent(
-    string OriginalText,
-    string NormalizedText,
-    IReadOnlyDictionary<string, string> ExtractedEntities
-)
-{
-    /// <summary>Merge with entities extracted by the classifier (classifier wins on conflict).</summary>
-    public Dictionary<string, string> MergeEntities(Dictionary<string, string> classifierEntities)
-    {
-        var merged = new Dictionary<string, string>(ExtractedEntities, StringComparer.OrdinalIgnoreCase);
-        foreach (var (k, v) in classifierEntities)
-            merged[k] = v;   // classifier is more authoritative
-        return merged;
-    }
-}
-```
-
-#### `Normalization/IntentRewriter.cs`
-
-```csharp
-// Normalization/IntentRewriter.cs
-namespace CffRoutingLayerDemo.Normalization;
-
-using System.Text.RegularExpressions;
-
-/// <summary>
-/// Stateless, synchronous rewriter that:
-/// 1. Replaces PII tokens (names, IDs, amounts, dates) with typed placeholders.
-/// 2. Normalises common surface variations to canonical vocabulary.
-///
-/// Order matters: more specific patterns run before broader ones so they
-/// don't accidentally consume each other's match groups.
-/// </summary>
-public sealed class IntentRewriter
-{
-    // ── PII extraction rules (order: most-specific first) ─────────────────
-
-    private static readonly (Regex Pattern, string Placeholder, string EntityKey)[] PiiRules =
-    [
-        // Account IDs  e.g. CHK-001, SAV-9901, ACC-12345
-        (new Regex(@"\b([A-Z]{2,4}-\d{3,6})\b", RegexOptions.Compiled),
-            "${accountId}", "accountId"),
-
-        // Monetary amounts  e.g. $1,234.56  $500  $12k (no cents)
-        (new Regex(@"\$[\d,]+(?:\.\d{2})?", RegexOptions.Compiled),
-            "${amount}", "amount"),
-
-        // Quarter + year  e.g. Q1 2024, Q3 2025
-        (new Regex(@"\bQ([1-4])\s*(20\d{2})\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "${period}", "period"),
-
-        // Relative periods
-        (new Regex(
-            @"\b(last\s+\d+\s+days?|this\s+month|last\s+month|year[\s\-]to[\s\-]date|ytd|last\s+quarter|this\s+quarter)\b",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "${period}", "period"),
-
-        // Named months  e.g. January, Feb, March
-        (new Regex(
-            @"\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "${period}", "period"),
-
-        // Tax / fiscal year  e.g. 2024, 2025
-        (new Regex(@"\b(20\d{2})\b", RegexOptions.Compiled),
-            "${year}", "year"),
-
-        // Legal entity types
-        (new Regex(
-            @"\b(LLC|S-Corp|C-Corp|sole\s+proprietor|partnership|S\s+Corp|C\s+Corp)\b",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "${entityType}", "entityType"),
-
-        // Customer / company name: title-case word(s) after relational preposition
-        // e.g. "invoice for Acme Corp", "bill to John Smith Consulting"
-        (new Regex(
-            @"\b(?:for|to|from|by)\s+((?:[A-Z][a-zA-Z&]+)(?:\s+(?:[A-Z][a-zA-Z&]+)){0,3})",
-            RegexOptions.Compiled),
-            "for ${customer}", "customer"),
-    ];
-
-    // ── Surface normalisation dictionary ──────────────────────────────────
-
-    private static readonly (Regex Pattern, string Replacement)[] NormalisationRules =
-    [
-        (new Regex(@"\bp\s*[&and]+\s*l\b|\bpnl\b|\bprofit\s+&\s+loss\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "profit and loss"),
-        (new Regex(@"\ba[/]?r\b|\baccounts?\s+receivable\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "accounts receivable"),
-        (new Regex(@"\ba[/]?p\b|\baccounts?\s+payable\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "accounts payable"),
-        (new Regex(@"\brecon(?:ciliation)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "reconcile"),
-        (new Regex(@"\bbill(?:ing)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-            "invoice"),
-    ];
-
-    // ── Public API ────────────────────────────────────────────────────────
-
-    public RewrittenIntent Rewrite(string rawText)
-    {
-        var entities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var text     = rawText.Trim();
-
-        // Step 1: apply surface normalisation (no entity extraction)
-        foreach (var (pattern, replacement) in NormalisationRules)
-            text = pattern.Replace(text, replacement);
-
-        // Step 2: extract PII entities and replace with placeholders
-        foreach (var (pattern, placeholder, entityKey) in PiiRules)
-        {
-            text = pattern.Replace(text, match =>
-            {
-                // capture the meaningful group (group 1 if present, else group 0)
-                var value = match.Groups.Count > 1 && match.Groups[1].Success
-                    ? match.Groups[1].Value
-                    : match.Value;
-
-                if (!entities.ContainsKey(entityKey))
-                    entities[entityKey] = value.Trim();
-
-                // For the customer rule, preserve the preposition
-                return entityKey == "customer"
-                    ? Regex.Replace(placeholder, @"\$\{customer\}", "${customer}")
-                    : placeholder;
-            });
-        }
-
-        // Step 3: collapse multiple spaces
-        text = Regex.Replace(text, @"\s{2,}", " ").Trim();
-
-        return new RewrittenIntent(rawText, text, entities);
-    }
-}
-```
-
-#### Updated `RoutingEngine` with rewriter stage
-
-```csharp
-// Core/RoutingEngine.cs
-public class RoutingEngine
-{
-    private readonly ISemanticCache    _cache;
-    private readonly IIntentClassifier _classifier;
-    private readonly AgentRegistry     _registry;
-    private readonly PlanExecutor      _executor;
-    private readonly IntentRewriter    _rewriter;
-
-    public RoutingEngine(
-        ISemanticCache cache,
-        IIntentClassifier classifier,
-        AgentRegistry registry,
-        PlanExecutor executor,
-        IntentRewriter? rewriter = null)   // optional: safe default if not injected
-    {
-        _cache      = cache;
-        _classifier = classifier;
-        _registry   = registry;
-        _executor   = executor;
-        _rewriter   = rewriter ?? new IntentRewriter();
-    }
-
-    public async Task<string> HandleAsync(RoutingContext context)
-    {
-        // Stage 1 — Guardrails
-        if (!IsInDomain(context.UserMessage))
-            return "Sorry, I can only assist with accounting and financial tasks.";
-
-        // Stage 2 — Intent Rewriter
-        var rewritten = _rewriter.Rewrite(context.UserMessage);
-        Console.WriteLine($"[REWRITE] \"{rewritten.NormalizedText}\"  entities: {string.Join(", ", rewritten.ExtractedEntities.Select(kv => $"{kv.Key}={kv.Value}"))}");
-
-        // Stage 3 — Semantic Cache (lookup on normalised text)
-        var cached = _cache.Lookup(rewritten.NormalizedText);
-        if (cached is not null)
-        {
-            Console.WriteLine($"[CACHE HIT] Intent: {cached.Intent.Intent} (similarity: {cached.Score:P0})");
-            // inject the real entity values into the cached plan before executing
-            var enrichedContext = context with
-            {
-                UserMessage = rewritten.NormalizedText,
-                Entities    = rewritten.ExtractedEntities
-            };
-            return await _executor.ExecuteAsync(cached.Plan, enrichedContext);
-        }
-
-        // Stage 4 — Intent Classification (on normalised text)
-        var intent = _classifier.Classify(rewritten.NormalizedText);
-        Console.WriteLine($"[CLASSIFIED] Intent: {intent.Intent} (confidence: {intent.Confidence:P0})");
-
-        // Merge rewriter entities into classifier entities
-        var mergedEntities = rewritten.MergeEntities(intent.Entities);
-        intent = intent with { Entities = mergedEntities };
-
-        // Stage 5 — Agent Registry
-        var agent = _registry.Resolve(intent.AgentId);
-
-        // Stage 6 — Execution Plan (entity values already present)
-        var plan = agent.BuildPlan(intent, context);
-        Console.WriteLine($"[PLAN] {plan.Steps.Count} steps generated");
-
-        // Stage 7 — Execute & Cache (store on normalised text)
-        var result = await _executor.ExecuteAsync(plan, context);
-        _cache.Store(rewritten.NormalizedText, intent, plan);
-
-        return result;
-    }
-}
-```
-
-#### Rewrite example trace
+At startup, `PlanEmbeddingIndex` calls **Titan Embeddings V2** (`amazon.titan-embed-text-v2:0`) for every plan. The embedding text per plan is:
 
 ```
-User: "create an invoice for Acme Corp $2,450.00 for consulting"
-
-Stage 2 — Rewriter:
-  surface normalise → "create an invoice for Acme Corp $2,450.00 for consulting"
-  PII extract:
-    $2,450.00  → ${amount}     entities["amount"]    = "$2,450.00"
-    "Acme Corp" (after "for") → ${customer}  entities["customer"] = "Acme Corp"
-  NormalizedText: "create an invoice for ${customer} ${amount} for consulting"
-
-Stage 3 — Cache lookup on "create an invoice for ${customer} ${amount} for consulting"
-  → HIT on second call even if customer name is different
-
-Stage 7 — Cache stores "create an invoice for ${customer} ${amount} for consulting"
-  → next call with "create invoice for John Smith $900" hits the same entry
+{understanding}
+{description}          ← stripped Approach field (computation vocabulary)
+{sampleQuery[0]}
+{sampleQuery[1]}
+…
 ```
+
+All temporal tokens are normalized symmetrically on both sides of the cosine comparison using `QueryNormalizer`:
+
+| Token type | Example | Normalized form |
+|---|---|---|
+| Fiscal year | `FY2024` | `${fiscalYear}` |
+| Month name | `March` | `${month}` |
+| Calendar quarter | `Q2` | `${quarter}` |
+| 4-digit year | `2024` | `${year}` |
+| ISO / partial date | `2024-01-01` | `${date}` |
+
+**Named entity values (customer names, invoice IDs, etc.) are intentionally NOT normalized** — replacing them with generic placeholders would collapse distinct semantic meaning and degrade cosine similarity.
+
+`HybridPlanRetriever` combines the embedding and metadata scores:
+
+```
+Combined = embedding_cosine × 0.55 + metadata × 0.45
+
+Metadata breakdown:
+  Domain match      0.35
+  SubDomain match   0.25
+  Action match      0.25
+  Temporal match    0.15
+```
+
+Outputs: top-10 `CandidateResult` objects ranked by `AlignmentScore`.
 
 ---
 
-### 2.3B Conversation History & Compaction
+### 2.5 Phase 2 — Re-ranking (LlmPlanJudge + FeatureAlignmentRanker)
 
-Every routed turn (and every streaming reply) is appended to a single `ConversationHistory` instance that lives for the duration of the REPL session. The history is passed into the LLM rewriter at Stage 2, enabling **coreference resolution** across turns.
-
-#### Architecture
+**Primary path** (when Bedrock is reachable): `LlmPlanJudge` calls Claude Haiku with a pointwise scoring prompt that includes, for each candidate:
 
 ```
-ConversationHistory
-├── _turns: List<ConversationTurn>  ← recent turns (capped at MaxActiveTurns)
-├── _summary: string?               ← compacted older turns (LLM-generated)
-│
-├── AddTurn(turn)       → append; check NeedsCompaction
-├── BuildContext(n)     → summary + last n turns formatted for LLM prompts
-└── CompactAsync(llm)   → summarise _turns[0..^MaxActiveTurns] into _summary,
-                          then remove them from _turns
+What it does: {understanding}
+How: {description}
+Steps: …  Inputs: …  Outputs: …
 ```
 
-#### ConversationTurn model
-
-```csharp
-// Conversation/ConversationTurn.cs
-public sealed record ConversationTurn(
-    DateTime Timestamp,
-    string UserMessage,                                // raw user input
-    string NormalizedMessage,                          // PII-free canonical form
-    IReadOnlyDictionary<string, string> ExtractedEntities,
-    string Intent,                                     // "GenerateCashFlowReport" | "Unknown" | "Streamed"
-    string AgentId,
-    string AssistantResponse,
-    bool WasStreamed                                   // true → handled by streaming fallback, not routing
-);
-```
-
-#### Compaction trigger & strategy
-
-| Setting | Value |
-|---|---|
-| `MaxActiveTurns` | 8 — kept verbatim in context window |
-| `CompactionThreshold` | 15 — when `_turns.Count` reaches this, compact |
-| Compaction model | Same Claude Haiku (small, fast) |
-| Compaction prompt | Summarise older turns in ≤ 3 sentences, preserving key entities |
-| Result | Old summary prepended + new summary; oldest turns removed |
-
-#### LLM Rewriter prompt (with history)
+**Fallback** (LLM unavailable or < 2 candidates): `FeatureAlignmentRanker`:
 
 ```
-[System]
-You are a concise intent normalizer for a financial accounting assistant.
-Given optional conversation context and a user message, return a JSON object only.
-
-PII replacement: customer/company names → ${customer}, account IDs → ${accountId},
-dollar amounts → ${amount}, periods/months → ${period}, years → ${year},
-entity types (LLC/S-Corp) → ${entityType}.
-
-Surface normalisation: P&L/pnl → "profit and loss", A/R → "accounts receivable",
-A/P → "accounts payable", recon/reconciliation → "reconcile", bill/billing → "invoice".
-
-Coreference: resolve "same account", "that customer", "last time" using the context below.
-If nothing to normalise or extract, return the original message unchanged.
-
-[Conversation context]
-{summary_and_recent_turns}
-
-[User message]
-"{raw_text}"
-
-[Response — JSON only, no prose]
-{ "normalizedText": "...", "entities": { "customer": "", "accountId": "", ... } }
+score = AlignmentScore (Phase 1)
+      + outputFieldOverlap    × 0.08    (camelCase-split token overlap with query words)
+      + descriptionRelevance  × 0.20    (Levenshtein tiebreaker with keyword-coherence guard)
+      − entityMismatchCount   × 0.15    (penalty per unmet entity)
 ```
 
-#### What flows through the pipeline with history
+`descriptionRelevance`:
+- Best normalized Levenshtein similarity between query and any `sampleQuery`
+- Falls back to keyword overlap against `understanding` + `description` when no sample queries
+- **Keyword-coherence guard**: result scaled by `0.25 + 0.75 × keywordCoverage`, where `keywordCoverage` = fraction of query content words (len > 4, non-stop-word) found in `understanding + description + sampleQueries`. Prevents plans with coincidental surface similarity from outscoring semantically correct plans.
 
-```
-Turn 1: "reconcile CHK-001 for May"
-  rewriter → { normalizedText: "reconcile ${accountId} for ${period}",
-                entities: { accountId: "CHK-001", period: "May" } }
-  → cache miss → execute → record turn
-
-Turn 2: "now do the savings account"
-  rewriter (with history) → resolves "savings account" → "SAV-001"
-  → { normalizedText: "reconcile ${accountId} for ${period}",
-       entities: { accountId: "SAV-001", period: "May" } }   ← period resolved from history
-  → cache HIT on same normalizedText!
-```
+`IsAmbiguous` = `top1Score − top2Score < AmbiguityGap (0.08)`.
 
 ---
 
-### 2.3 Core Data Models
+### 2.6 Phase 3 — Validation (CompositeValidator)
 
-```csharp
-// Core/IntentResult.cs
-public record IntentResult(
-    string Intent,
-    double Confidence,
-    Dictionary<string, string> Entities,
-    string AgentId,
-    bool RequiresConfirmation,
-    bool FromCache = false
-);
+`CompositeValidator` runs three validators in sequence. If validation fails, the pipeline falls back to the next-best candidate (up to 3 attempts):
 
-// Core/ExecutionPlan.cs
-public record PlanStep(
-    int StepId,
-    string Action,
-    Dictionary<string, string> Input,
-    int[] DependsOn
-);
+#### SlotCoverageValidator
+Checks that every key listed in `defaultEntities` either has a default value in the plan or has been supplied by the user. Hard fail if a required slot is missing.
 
-public record ExecutionPlan(
-    string PlanId,
-    string Intent,
-    List<PlanStep> Steps
-);
+#### SchemaCompatibilityValidator
+Checks that the output fields declared across `steps[].outputFields` are internally consistent (no undefined step references in `dependsOn`).
 
-// Core/RoutingContext.cs
-public record RoutingContext(
-    string RequestId,
-    string UserMessage,
-    string CompanyId,
-    DateTime Timestamp,
-    IReadOnlyDictionary<string, string>? Entities = null  // populated by IntentRewriter
-);
+#### SemanticCoherenceValidator
+Extracts content words (len > 4, non-stop-word) from `understanding + description`. Measures what fraction of those words appear in the user's query. If **< 20%** the plan's subject is likely absent from the query — emits a **Warn** (not Fail) so the plan is still attempted but the mismatch is visible in the console trace.
+
+Stop-words excluded from coverage: `which, where, about, would, could, should, their, there, these, those, shall, might, shows, lists, gives, based, given, using, across, within, between, through, against, total, value, values, amount, number, count, level, point, items, company, account, report, query`, and common short words (len ≤ 4).
+
+---
+
+### 2.7 Routing Decision Thresholds
+
+| Condition | Status | Action |
+|---|---|---|
+| Phase 0 confidence < 0.28 | `Rejected` | Streaming LLM fallback; no retrieval attempted |
+| Phase 1 top score < 0.45 | `NoPlanFound` | No plan confident enough |
+| Top score < 0.35 | `Rejected` | "No plan found" message |
+| Top score ≥ 0.35 and < 0.60 | `Clarify` | Ask user to rephrase |
+| Top score ≥ 0.60, gap < 0.08 | `Ambiguous` | Present top candidates |
+| Top score ≥ 0.60 and < 0.75, gap ≥ 0.08 | `ConfirmAndExecute` | Show plan, ask yes/no |
+| Top score ≥ 0.75 and gap ≥ 0.08 | `Success` | Execute immediately |
+
+Multi-intent: sub-intents that return **`Success` or `ConfirmAndExecute`** are collected. At least one success → `MultiSuccess`; all fail → `NoPlanFound`.
+
+---
+
+### 2.8 Plan YAML Format
+
+```yaml
+planId: tax-001
+intent: EstimateTaxLiability
+agentId: FinancialAgent
+domain: finance
+displayName: Financial Agent
+understanding: "Estimate the tax liability for a given year and entity type based on taxable income after deductions"
+description: "Fetch taxable income, apply standard deductions, compute tax using bracket tables, deduct prior payments, and suggest quarterly instalments"
+sampleQueries:
+  - "How much tax do we owe for 2024?"
+  - "What's our tax situation for this year?"
+defaultEntities:
+  year: "2024"
+  entityType: S-Corp
+  companyId: DEMO-001
+steps:
+  - id: 1
+    action: fetch-taxable-income
+    stepType: Tool
+    dependsOn: []
+    outputFields: [taxableIncome]
+  - id: 2
+    action: apply-deductions
+    stepType: Tool
+    dependsOn: [1]
+    outputFields: [deductions, adjustedIncome]
+  - id: 3
+    action: compute-tax-liability
+    stepType: Code
+    dependsOn: [2]
+    outputFields: [taxLiability, effectiveRate]
 ```
 
-### 2.4 Routing Engine — Pipeline
+Key fields used by the routing pipeline:
 
-> Full implementation with the rewriter injected is in **Section 2.3A**. This is the abridged stage overview.
+| Field | Phase | Purpose |
+|---|---|---|
+| `domain` | 1 metadata | Domain match (weight 0.35) |
+| `understanding` | 1 embedding + 2 re-ranking | What the plan achieves; embedded and used in keyword-coherence guard |
+| `description` | 1 embedding + 2 re-ranking | How the plan works (stripped Approach); adds computation vocabulary absent from `understanding`; embedded between `understanding` and `sampleQueries` |
+| `sampleQueries` | 1 embedding + 2 tiebreaker | Embedded (normalised); Levenshtein tiebreaker in FeatureAlignmentRanker |
+| `defaultEntities` | 3 slot coverage | Keys define required inputs; values provide defaults |
+| `steps[].outputFields` | 2 overlap + 3 schema | Output field token overlap bonus; schema validation |
 
-```csharp
-// Core/RoutingEngine.cs
-public class RoutingEngine
-{
-    private readonly ISemanticCache    _cache;
-    private readonly IIntentClassifier _classifier;
-    private readonly AgentRegistry     _registry;
-    private readonly PlanExecutor      _executor;
-    private readonly IntentRewriter    _rewriter = new();
-
-    public async Task<string> HandleAsync(RoutingContext context)
-    {
-        // Stage 1 — Guardrails
-        if (!IsInDomain(context.UserMessage))
-            return "Sorry, I can only assist with accounting and financial tasks.";
-
-        // Stage 2 — Intent Rewriter (PII extraction + normalisation)
-        var rewritten = _rewriter.Rewrite(context.UserMessage);
-
-        // Stage 3 — Semantic Cache (lookup on normalised text)
-        var cached = _cache.Lookup(rewritten.NormalizedText);
-        if (cached is not null)
-        {
-            Console.WriteLine($"[CACHE HIT] Intent: {cached.Intent.Intent} (similarity: {cached.Score:P0})");
-            return await _executor.ExecuteAsync(cached.Plan, context);
-        }
-
-        // Stage 4 — Intent Classification (on normalised text)
-        var intent = _classifier.Classify(rewritten.NormalizedText);
-        intent = intent with { Entities = rewritten.MergeEntities(intent.Entities) };
-        Console.WriteLine($"[CLASSIFIED] Intent: {intent.Intent} (confidence: {intent.Confidence:P0})");
-
-        // Stage 5 — Agent Registry Lookup
-        var agent = _registry.Resolve(intent.AgentId);
-
-        // Stage 6 — Execution Plan Generation
-        var plan = agent.BuildPlan(intent, context);
-        Console.WriteLine($"[PLAN] {plan.Steps.Count} steps generated");
-
-        // Stage 7 — Execute & Cache (store on normalised text key)
-        var result = await _executor.ExecuteAsync(plan, context);
-        _cache.Store(rewritten.NormalizedText, intent, plan);
-
-        return result;
-    }
-}
-```
-
-### 2.5 Semantic Cache — In-Memory Implementation
-
-```csharp
-// Cache/InMemorySemanticCache.cs
-public class InMemorySemanticCache : ISemanticCache
-{
-    private readonly List<CacheEntry> _entries = new();
-    private readonly EmbeddingSimulator _embedder;
-    private const double SimilarityThreshold = 0.88;
-
-    public CacheHit? Lookup(string userMessage)
-    {
-        var queryVector = _embedder.Embed(userMessage);
-
-        return _entries
-            .Select(e => new { Entry = e, Score = CosineSimilarity(queryVector, e.Vector) })
-            .Where(x => x.Score >= SimilarityThreshold)
-            .OrderByDescending(x => x.Score)
-            .Select(x => new CacheHit(x.Entry.Intent, x.Entry.Plan, x.Score))
-            .FirstOrDefault();
-    }
-
-    public void Store(string userMessage, IntentResult intent, ExecutionPlan plan)
-    {
-        _entries.Add(new CacheEntry(
-            Vector: _embedder.Embed(userMessage),
-            Intent: intent,
-            Plan: plan,
-            StoredAt: DateTime.UtcNow
-        ));
-    }
-
-    private static double CosineSimilarity(double[] a, double[] b)
-    {
-        double dot = a.Zip(b, (x, y) => x * y).Sum();
-        double magA = Math.Sqrt(a.Sum(x => x * x));
-        double magB = Math.Sqrt(b.Sum(x => x * x));
-        return magA == 0 || magB == 0 ? 0 : dot / (magA * magB);
-    }
-}
-```
-
-### 2.6 Embedding Simulator (No API Needed)
-
-For the demo, real vector embeddings are replaced with a deterministic keyword-based vector that simulates semantic similarity without any API calls:
-
-```csharp
-// Cache/EmbeddingSimulator.cs
-// Maps keywords to feature dimensions so semantically similar phrases
-// produce high cosine similarity scores.
-public class EmbeddingSimulator
-{
-    private static readonly string[] Dimensions =
-    [
-        "cashflow", "invoice", "reconcile", "tax", "expense", "revenue",
-        "report", "balance", "payroll", "vendor", "customer", "budget",
-        "forecast", "payment", "account", "transaction", "profit", "loss"
-    ];
-
-    public double[] Embed(string text)
-    {
-        var lower = text.ToLowerInvariant();
-        return Dimensions.Select(d =>
-            lower.Contains(d) ? 1.0 + (lower.Split(' ').Count(w => w.Contains(d)) * 0.1) : 0.0
-        ).ToArray();
-    }
-}
-```
+The `description` field is generated by `CffPlanTransformer` from the plan's `Reasoning → Approach` section: tool invocation phrases (`via tool_name`, `in a Code step`) and bare multi-underscore tool names are stripped, then `NormalizeUnderstanding` is applied.
 
 ---
 

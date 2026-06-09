@@ -34,7 +34,10 @@ Phase 2 — Plan Re-ranking
     │
     ▼
 Phase 3 — Plan Validation
-    SlotCoverageValidator + SchemaCompatibilityValidator
+    SlotCoverageValidator + SchemaCompatibilityValidator + SemanticCoherenceValidator
+    SlotCoverageValidator: checks required slot keys are bound or defaulted
+    SchemaCompatibilityValidator: checks output field compatibility
+    SemanticCoherenceValidator: warns when plan subject words are absent from query
     Falls back to next-best candidate if validation fails (up to 3 attempts)
     │
     ▼
@@ -75,7 +78,10 @@ CffRoutingLayer.sln
 │   │   ├── LlmPlanJudge.cs           # Bedrock Claude Phase 2 re-ranker (primary)
 │   │   └── ScoringWeights.cs         # Tunable weights
 │   ├── Validation/
-│   │   └── CompositeValidator.cs     # Slot coverage + schema compatibility
+    │   ├── CompositeValidator.cs         # Runs all validators; slot coverage + schema + semantic coherence
+    │   ├── SlotCoverageValidator.cs      # Required slot keys must be bound or defaulted
+    │   ├── SchemaCompatibilityValidator.cs # Output field compatibility check
+    │   └── SemanticCoherenceValidator.cs # Warns when plan subject absent from query (semantic mismatch guard)
 │   ├── Plans/
 │   │   ├── PlanLoader.cs             # Deserialises YAML → PlanDefinition
 │   │   └── PlanExecutor.cs           # Runs plan steps against CompanyDataStore
@@ -184,8 +190,8 @@ score = AlignmentScore (Phase 1)
 
 `descriptionRelevance` is computed as follows:
 - Best normalised Levenshtein edit similarity between the query and any of the plan's `sampleQueries`
-- Falls back to corpus keyword overlap against `understanding` text when no sample queries exist
-- **Keyword-coherence guard**: result is scaled by `0.25 + 0.75 × keywordCoverage`, where `keywordCoverage` is the fraction of the query's content words (len > 4, non-stop-word) present in the plan's combined `understanding` + `sampleQueries` text. This prevents a plan with coincidental surface similarity from outscoring a semantically correct plan.
+- Falls back to corpus keyword overlap against `understanding` + `description` text when no sample queries exist
+- **Keyword-coherence guard**: result is scaled by `0.25 + 0.75 × keywordCoverage`, where `keywordCoverage` is the fraction of the query's content words (len > 4, non-stop-word) present in the plan's combined `understanding` + `description` + `sampleQueries` text. This prevents a plan with coincidental surface similarity from outscoring a semantically correct plan.
 
 `IsAmbiguous` is true when `top1Score − top2Score < AmbiguityGap (0.08)`.
 
